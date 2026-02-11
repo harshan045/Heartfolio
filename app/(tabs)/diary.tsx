@@ -112,7 +112,7 @@ export default function DiaryListView() {
     return (
         <GestureHandlerRootView style={styles.container}>
             <View style={styles.container}>
-                <Text style={styles.title}>My Diaries 📓</Text>
+                <Text style={styles.title}>My Pages</Text>
 
                 <GestureDetector gesture={composed}>
                     <Animated.FlatList

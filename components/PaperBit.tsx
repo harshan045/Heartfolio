@@ -7,6 +7,14 @@ interface PaperBitProps {
 }
 
 export default function PaperBit({ data }: PaperBitProps) {
+    if (data.isSticker) {
+        return (
+            <View style={[{ width: data.width || 100, justifyContent: 'center', alignItems: 'center' }]}>
+                <Text style={{ fontSize: (data.width || 100) / 2 }}>{data.text}</Text>
+            </View>
+        );
+    }
+
     return (
         <View style={[
             styles.container,

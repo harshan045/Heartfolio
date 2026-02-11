@@ -53,6 +53,7 @@ export default function PolaroidGallery() {
   const [newBitText, setNewBitText] = useState("");
   const [selectedColor, setSelectedColor] = useState(PAPER_COLORS[0]);
   const [editingBitId, setEditingBitId] = useState<string | null>(null);
+  const [isAddingSticker, setIsAddingSticker] = useState(false);
 
   // Album selection state
   const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
@@ -126,22 +127,33 @@ export default function PolaroidGallery() {
     setPaperBits(prev => prev.map(b => b.id === bit.id ? updatedBit : b));
   };
 
-  const handleDeleteBit = (id: string) => {
-    Alert.alert(
-      "Remove Note",
-      "Are you sure you want to remove this paper bit?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            await deletePaperBit(id);
-            loadMemories(); // Refresh list
-          },
-        },
-      ]
-    );
+  const handleDeleteBit = async (id: string) => {
+    await deletePaperBit(id);
+    loadMemories(); // Refresh list
+  };
+
+  const saveSticker = async () => {
+    if (!newBitText.trim() || !selectedAlbum) {
+      setIsAddingSticker(false);
+      return;
+    }
+
+    const sticker: PaperBit = {
+      id: Date.now().toString(),
+      text: newBitText,
+      x: width / 2 - 50,
+      y: 150,
+      rotation: 0,
+      color: 'transparent',
+      width: 100,
+      album: selectedAlbum,
+      isSticker: true
+    };
+
+    await savePaperBit(sticker);
+    setNewBitText("");
+    setIsAddingSticker(false);
+    loadMemories();
   };
 
   const handleRenameAlbum = async () => {
@@ -336,14 +348,22 @@ export default function PolaroidGallery() {
           ))}
       </ScrollView>
 
-      {/* Add Bit Button - Fixed Position outside ScrollView */}
+      {/* Add Bit Buttons - Fixed Position outside ScrollView */}
       {selectedAlbum && (
-        <Pressable style={styles.fab} onPress={() => {
-          setIsAddingBit(true);
-          setSelectedColor(PAPER_COLORS[Math.floor(Math.random() * PAPER_COLORS.length)]);
-        }}>
-          <Text style={styles.fabText}>+ 📝</Text>
-        </Pressable>
+        <View style={styles.fabContainer}>
+          <Pressable style={[styles.fab, { backgroundColor: '#B2CEFE' }]} onPress={() => {
+            setIsAddingSticker(true);
+            setNewBitText("");
+          }}>
+            <Text style={styles.fabText}>❤️</Text>
+          </Pressable>
+          <Pressable style={styles.fab} onPress={() => {
+            setIsAddingBit(true);
+            setSelectedColor(PAPER_COLORS[Math.floor(Math.random() * PAPER_COLORS.length)]);
+          }}>
+            <Text style={styles.fabText}>📝</Text>
+          </Pressable>
+        </View>
       )}
 
       {/* Expansion Modal */}
@@ -415,6 +435,36 @@ export default function PolaroidGallery() {
               </Pressable>
               <Pressable style={[styles.inputButton, styles.saveButton]} onPress={saveBit}>
                 <Text style={styles.buttonText}>Stick It!</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Sticker Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isAddingSticker}
+        onRequestClose={() => setIsAddingSticker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Pick an Emoji 🎭</Text>
+            <TextInput
+              style={[styles.textInput, { fontSize: 50, textAlign: 'center', height: 100 }]}
+              value={newBitText}
+              onChangeText={setNewBitText}
+              placeholder="😊"
+              maxLength={2}
+              autoFocus
+            />
+            <View style={styles.inputButtons}>
+              <Pressable style={[styles.inputButton, styles.cancelButton]} onPress={() => setIsAddingSticker(false)}>
+                <Text style={styles.buttonText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={[styles.inputButton, styles.saveButton]} onPress={saveSticker}>
+                <Text style={styles.buttonText}>Add Sticker</Text>
               </Pressable>
             </View>
           </View>
@@ -734,24 +784,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#888",
   },
-  fab: {
+  fabContainer: {
     position: 'absolute',
     bottom: 30,
     right: 30,
+    gap: 15,
+  },
+  fab: {
     backgroundColor: '#FF8FAB',
     width: 60,
     height: 60,
     borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
   },
   fabText: {
-    fontSize: 24,
+    fontSize: 28,
     color: 'white',
   },
   inputContainer: {

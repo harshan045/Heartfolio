@@ -31,6 +31,7 @@ const MAPPING = {
   'hand.draw': 'gesture',
   'arrow.uturn.backward': 'undo',
   'arrow.uturn.forward': 'redo',
+  'xmark': 'close',
 } as IconMapping;
 
 /**

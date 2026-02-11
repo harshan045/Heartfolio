@@ -29,7 +29,8 @@ import {
     DiaryElement,
     getDiaryElements,
     PAPER_COLORS,
-    saveDiaryElement
+    saveDiaryElement,
+    saveDiaryElements
 } from "../utils/storage";
 
 const { width, height } = Dimensions.get("window");
@@ -42,6 +43,7 @@ export default function DiaryPageScreen() {
     const [elements, setElements] = useState<DiaryElement[]>([]);
     const [loading, setLoading] = useState(true);
     const [deletingElementId, setDeletingElementId] = useState<string | null>(null);
+    const [imageMenuElementId, setImageMenuElementId] = useState<string | null>(null);
     const [isAddingText, setIsAddingText] = useState(false);
     const [modalMode, setModalMode] = useState<'text' | 'sticky' | 'sticker'>('text');
     const [newText, setNewText] = useState("");
@@ -53,7 +55,8 @@ export default function DiaryPageScreen() {
     const [activeTool, setActiveTool] = useState<'pencil' | 'pen' | 'eraser'>('pen');
     const [currentPathPoints, setCurrentPathPoints] = useState<{ x: number, y: number }[] | null>(null);
     const [paths, setPaths] = useState<DiaryElement[]>([]);
-    const [redoStack, setRedoStack] = useState<DiaryElement[]>([]);
+    const [redoStack, setRedoStack] = useState<{ elements: DiaryElement[], paths: DiaryElement[] }[]>([]);
+    const [history, setHistory] = useState<{ elements: DiaryElement[], paths: DiaryElement[] }[]>([]);
 
     // Shared value to accumulate points efficiently during drawing
     const activePointsSV = useSharedValue<{ x: number, y: number }[]>([]);
@@ -71,25 +74,53 @@ export default function DiaryPageScreen() {
         loadElements();
     }, [id]);
 
+    const pushToHistory = (newElements: DiaryElement[], newPaths: DiaryElement[]) => {
+        setHistory(prev => [...prev.slice(-19), { elements: [...elements], paths: [...paths] }]);
+        setRedoStack([]);
+    };
+
     const addImage = async () => {
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: 'images',
                 quality: 1,
+                allowsEditing: false, // Don't force editing to preserve original aspect ratio
             });
 
             if (!result.canceled && id) {
+                const asset = result.assets[0];
+
+                // Calculate scaled dimensions while preserving aspect ratio
+                const maxSize = 300;
+                const aspectRatio = asset.width / asset.height;
+                let scaledWidth = asset.width;
+                let scaledHeight = asset.height;
+
+                if (asset.width > maxSize || asset.height > maxSize) {
+                    if (aspectRatio > 1) {
+                        // Landscape
+                        scaledWidth = maxSize;
+                        scaledHeight = maxSize / aspectRatio;
+                    } else {
+                        // Portrait or square
+                        scaledHeight = maxSize;
+                        scaledWidth = maxSize * aspectRatio;
+                    }
+                }
+
                 const newEl: DiaryElement = {
                     id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     entryId: id,
                     type: 'image',
-                    content: result.assets[0].uri,
+                    content: asset.uri,
                     x: 50,
                     y: 150,
                     rotation: Math.random() * 10 - 5,
                     scale: 1,
+                    width: scaledWidth,
+                    height: scaledHeight,
                 };
-                await saveDiaryElement(newEl);
+                pushToHistory(elements, paths);
                 setElements([...elements, newEl]);
             }
         } catch (error) {
@@ -117,7 +148,7 @@ export default function DiaryPageScreen() {
                 color: modalMode === 'sticky' ? selectedColor : undefined,
             };
 
-            await saveDiaryElement(newEl);
+            pushToHistory(elements, paths);
             setElements([...elements, newEl]);
             setNewText("");
             setIsAddingText(false);
@@ -148,8 +179,8 @@ export default function DiaryPageScreen() {
 
         try {
             await saveDiaryElement(newPath);
+            pushToHistory(elements, paths);
             setPaths(prev => [...prev, newPath]);
-            setRedoStack([]); // New drawing action clears redo history
             setCurrentPathPoints(null);
         } catch (error) {
             console.error('Error saving path:', error);
@@ -175,36 +206,63 @@ export default function DiaryPageScreen() {
         }), [isDrawMode, activeTool, id]);
 
     const handleUndo = async () => {
-        if (paths.length === 0) return;
-        const lastPath = paths[paths.length - 1];
-        try {
-            await deleteDiaryElement(lastPath.id);
-            setPaths(prev => prev.slice(0, -1));
-            setRedoStack(prev => [...prev, lastPath]);
-        } catch (error) {
-            console.error('Error undoing:', error);
-        }
+        if (history.length === 0) return;
+        const previousState = history[history.length - 1];
+
+        // Save current to redo
+        setRedoStack(prev => [...prev, { elements: [...elements], paths: [...paths] }]);
+
+        // Restore previous
+        setElements(previousState.elements);
+        setPaths(previousState.paths);
+        setHistory(prev => prev.slice(0, -1));
+
+        // Persist to storage
+        await saveDiaryElements([...previousState.elements, ...previousState.paths], id);
     };
 
     const handleRedo = async () => {
         if (redoStack.length === 0) return;
-        const pathToRestore = redoStack[redoStack.length - 1];
-        try {
-            await saveDiaryElement(pathToRestore);
-            setPaths(prev => [...prev, pathToRestore]);
-            setRedoStack(prev => prev.slice(0, -1));
-        } catch (error) {
-            console.error('Error redoing:', error);
-        }
+        const nextState = redoStack[redoStack.length - 1];
+
+        // Save current to history
+        setHistory(prev => [...prev, { elements: [...elements], paths: [...paths] }]);
+
+        // Restore next
+        setElements(nextState.elements);
+        setPaths(nextState.paths);
+        setRedoStack(prev => prev.slice(0, -1));
+
+        // Persist to storage
+        await saveDiaryElements([...nextState.elements, ...nextState.paths], id);
     };
 
-    const updateElement = async (el: DiaryElement, x: number, y: number, rotation: number, scale: number, fontFamily?: string) => {
-        const updated = { ...el, x, y, rotation, scale, fontFamily: fontFamily || el.fontFamily };
+    const updateElement = async (el: DiaryElement, updates: Partial<DiaryElement>, skipHistory = true) => {
+        const updated = { ...el, ...updates };
+        if (!skipHistory) pushToHistory(elements, paths);
         await saveDiaryElement(updated);
         setElements(prev => prev.map(item => item.id === el.id ? updated : item));
     };
 
+    const handleToggleShadow = async (elementId: string) => {
+        const element = elements.find(e => e.id === elementId);
+        if (element) {
+            await updateElement(element, { hasShadow: !element.hasShadow });
+        }
+        setImageMenuElementId(null);
+    };
+
+    const handleBringToFront = async (elementId: string) => {
+        const maxZ = Math.max(...elements.map(e => e.zIndex || 0), 0);
+        const element = elements.find(e => e.id === elementId);
+        if (element) {
+            await updateElement(element, { zIndex: maxZ + 1 });
+        }
+        setImageMenuElementId(null);
+    };
+
     const handleDelete = async (elementId: string) => {
+        pushToHistory(elements, paths);
         await deleteDiaryElement(elementId);
         setElements(prev => prev.filter(e => e.id !== elementId));
         setPaths(prev => prev.filter(e => e.id !== elementId));
@@ -232,9 +290,20 @@ export default function DiaryPageScreen() {
                 </Pressable>
                 <Text style={styles.title}>{title || "My Page"}</Text>
                 <View style={{ flex: 1 }} />
+                <View style={styles.headerButtons}>
+                    <Pressable onPress={handleUndo} style={styles.headerButton}>
+                        <IconSymbol name="arrow.uturn.backward" size={22} color="#333" />
+                    </Pressable>
+                    <Pressable onPress={handleRedo} style={styles.headerButton}>
+                        <IconSymbol name="arrow.uturn.forward" size={22} color="#333" />
+                    </Pressable>
+                </View>
             </View>
 
-            <GestureDetector gesture={Gesture.Tap().onEnd(() => runOnJS(setDeletingElementId)(null))}>
+            <GestureDetector gesture={Gesture.Tap().onEnd(() => {
+                runOnJS(setDeletingElementId)(null);
+                runOnJS(setImageMenuElementId)(null);
+            })}>
                 <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
                     {/* Visual Elements */}
                     {elements.map(el => (
@@ -246,6 +315,10 @@ export default function DiaryPageScreen() {
                             disabled={isDrawMode}
                             isDeleting={deletingElementId === el.id}
                             onSetDeleting={(id) => setDeletingElementId(id)}
+                            showImageMenu={imageMenuElementId === el.id}
+                            onSetImageMenu={(id) => setImageMenuElementId(id)}
+                            onToggleShadow={() => handleToggleShadow(el.id)}
+                            onBringToFront={() => handleBringToFront(el.id)}
                         />
                     ))}
 
@@ -286,23 +359,6 @@ export default function DiaryPageScreen() {
             {isDrawMode ? (
                 <View style={styles.drawingToolbar}>
                     <Pressable
-                        style={[styles.toolButton, paths.length === 0 && { opacity: 0.5 }]}
-                        onPress={handleUndo}
-                        disabled={paths.length === 0}
-                    >
-                        <IconSymbol name="arrow.uturn.backward" size={24} color="#333" />
-                    </Pressable>
-                    <Pressable
-                        style={[styles.toolButton, redoStack.length === 0 && { opacity: 0.5 }]}
-                        onPress={handleRedo}
-                        disabled={redoStack.length === 0}
-                    >
-                        <IconSymbol name="arrow.uturn.forward" size={24} color="#333" />
-                    </Pressable>
-
-                    <View style={styles.toolbarSeparator} />
-
-                    <Pressable
                         style={[styles.toolButton, activeTool === 'pencil' && styles.activeTool]}
                         onPress={() => setActiveTool('pencil')}
                     >
@@ -320,6 +376,15 @@ export default function DiaryPageScreen() {
                         onPress={() => setActiveTool('eraser')}
                     >
                         <IconSymbol name="eraser" size={24} color={activeTool === 'eraser' ? "#fff" : "#333"} />
+                    </Pressable>
+
+                    <View style={styles.toolbarSeparator} />
+
+                    <Pressable
+                        style={[styles.toolButton, { backgroundColor: '#FF8FAB' }]}
+                        onPress={() => setIsDrawMode(false)}
+                    >
+                        <IconSymbol name="xmark" size={24} color="#ffffff" />
                     </Pressable>
                 </View>
             ) : (
@@ -415,6 +480,8 @@ export default function DiaryPageScreen() {
                     </View>
                 </View>
             </Modal>
+
+
         </GestureHandlerRootView>
     );
 }
@@ -425,14 +492,22 @@ const DraggableElement = ({
     onDelete,
     disabled = false,
     isDeleting = false,
-    onSetDeleting
+    onSetDeleting,
+    showImageMenu = false,
+    onSetImageMenu,
+    onToggleShadow,
+    onBringToFront,
 }: {
     element: DiaryElement,
-    onUpdate: (el: DiaryElement, x: number, y: number, rotation: number, scale: number, fontFamily?: string) => void,
+    onUpdate: (el: DiaryElement, updates: Partial<DiaryElement>) => void,
     onDelete: () => void,
     disabled?: boolean,
     isDeleting?: boolean,
-    onSetDeleting: (id: string | null) => void
+    onSetDeleting: (id: string | null) => void,
+    showImageMenu?: boolean,
+    onSetImageMenu?: (id: string | null) => void,
+    onToggleShadow?: () => void,
+    onBringToFront?: () => void,
 }) => {
     const isPressed = useSharedValue(false);
     const offset = useSharedValue({ x: element.x, y: element.y });
@@ -441,6 +516,9 @@ const DraggableElement = ({
     const startScale = useSharedValue(element.scale);
     const rotation = useSharedValue(element.rotation);
     const startRotation = useSharedValue(element.rotation);
+    const width = useSharedValue(element.width || 180);
+    const height = useSharedValue(element.height || 180);
+    const startSize = useSharedValue({ width: element.width || 180, height: element.height || 180 });
 
     // Sync shared values when props change
     useEffect(() => {
@@ -448,7 +526,9 @@ const DraggableElement = ({
         start.value = { x: element.x, y: element.y };
         scale.value = element.scale;
         rotation.value = element.rotation;
-    }, [element.x, element.y, element.scale, element.rotation]);
+        width.value = element.width || 180;
+        height.value = element.height || 180;
+    }, [element.x, element.y, element.scale, element.rotation, element.width, element.height]);
 
     const pan = React.useMemo(() => Gesture.Pan()
         .enabled(!disabled)
@@ -463,7 +543,7 @@ const DraggableElement = ({
         })
         .onEnd(() => {
             start.value = { x: offset.value.x, y: offset.value.y };
-            runOnJS(onUpdate)(element, offset.value.x, offset.value.y, rotation.value, scale.value, element.fontFamily);
+            runOnJS(onUpdate)(element, { x: offset.value.x, y: offset.value.y, rotation: rotation.value, scale: scale.value });
         })
         .onFinalize(() => {
             isPressed.value = false;
@@ -479,7 +559,7 @@ const DraggableElement = ({
             scale.value = startScale.value * e.scale;
         })
         .onEnd(() => {
-            runOnJS(onUpdate)(element, offset.value.x, offset.value.y, rotation.value, scale.value, element.fontFamily);
+            runOnJS(onUpdate)(element, { x: offset.value.x, y: offset.value.y, rotation: rotation.value, scale: scale.value });
         }), [element, onUpdate, disabled]);
 
     const rotate = React.useMemo(() => Gesture.Rotation()
@@ -492,16 +572,39 @@ const DraggableElement = ({
             rotation.value = startRotation.value + (e.rotation * 180 / Math.PI);
         })
         .onEnd(() => {
-            runOnJS(onUpdate)(element, offset.value.x, offset.value.y, rotation.value, scale.value, element.fontFamily);
+            runOnJS(onUpdate)(element, { x: offset.value.x, y: offset.value.y, rotation: rotation.value, scale: scale.value });
+        }), [element, onUpdate, disabled]);
+
+    const resizePan = React.useMemo(() => Gesture.Pan()
+        .enabled(!disabled && element.type === 'image')
+        .onBegin(() => {
+            isPressed.value = true;
+            startSize.value = { width: width.value, height: height.value };
+        })
+        .onUpdate((e) => {
+            // Resize preserving aspect ratio
+            const ratio = startSize.value.width / startSize.value.height;
+            const newWidth = Math.max(50, startSize.value.width + e.translationX);
+            width.value = newWidth;
+            height.value = newWidth / ratio;
+        })
+        .onEnd(() => {
+            runOnJS(onUpdate)(element, { width: width.value, height: height.value });
+        })
+        .onFinalize(() => {
+            isPressed.value = false;
         }), [element, onUpdate, disabled]);
 
     const longPress = React.useMemo(() => Gesture.LongPress()
         .enabled(!disabled)
         .onEnd((_e, success) => {
             if (success) {
-                runOnJS(onSetDeleting)(element.id);
+                runOnJS(onSetDeleting)(element.id); // Always show red badge on long press
+                if (element.type === 'image' && onSetImageMenu) {
+                    runOnJS(onSetImageMenu)(element.id);
+                }
             }
-        }), [element.id, disabled, onSetDeleting]);
+        }), [element.id, element.type, disabled, onSetDeleting, onSetImageMenu]);
 
     const gesture = React.useMemo(() => Gesture.Simultaneous(
         Gesture.Exclusive(longPress, pan),
@@ -517,7 +620,17 @@ const DraggableElement = ({
                 { scale: scale.value * (isPressed.value ? 1.05 : 1) }
             ],
             position: 'absolute',
-            zIndex: isPressed.value ? 1000 : 1,
+            zIndex: isPressed.value ? 1000 : (element.zIndex || 1),
+            width: width.value,
+            height: height.value,
+        };
+    });
+
+    const controlStyle = useAnimatedStyle(() => {
+        return {
+            transform: [
+                { scale: 1 / scale.value }
+            ],
         };
     });
 
@@ -525,61 +638,117 @@ const DraggableElement = ({
         if (element.type !== 'text') return;
         const currentIndex = FONTS.indexOf(element.fontFamily || "PatrickHand_400Regular");
         const nextIndex = (currentIndex + 1) % FONTS.length;
-        // Pass current shared values to avoid direct .value access during a potential render cycle
-        onUpdate(element, offset.value.x, offset.value.y, rotation.value, scale.value, FONTS[nextIndex]);
+        onUpdate(element, { fontFamily: FONTS[nextIndex] });
     };
 
     return (
-        <GestureDetector gesture={gesture}>
-            <Animated.View style={animatedStyle}>
-                {element.type === 'image' ? (
-                    <View style={styles.pastedImageContainer}>
-                        <Image source={{ uri: element.content }} style={styles.diaryImage} resizeMode="cover" />
-                    </View>
-                ) : element.type === 'sticker' ? (
-                    <View style={styles.stickerContainer}>
-                        <Text style={styles.stickerText}>{element.content}</Text>
-                    </View>
-                ) : (
-                    <View style={[
-                        styles.textContainer,
-                        element.type === 'sticky' && {
-                            backgroundColor: element.color || '#FFFF99',
-                            borderRadius: 2,
-                            shadowColor: "#000",
-                            shadowOffset: { width: 4, height: 4 },
-                            shadowOpacity: 0.15,
-                            shadowRadius: 6,
-                            elevation: 5,
-                            minHeight: 120,
-                            minWidth: 120,
-                            justifyContent: 'center',
-                        }
-                    ]}>
-                        <Text style={[
-                            styles.diaryText,
-                            { fontFamily: element.fontFamily || "PatrickHand_400Regular" },
-                            element.type === 'sticky' && { textAlign: 'center' }
+        <Animated.View style={animatedStyle}>
+            <GestureDetector gesture={gesture}>
+                <View>
+                    {element.type === 'image' ? (
+                        <View style={[
+                            styles.pastedImageContainer,
+                            element.hasShadow && {
+                                backgroundColor: '#fff', // Required for Android elevation shadow
+                                shadowColor: '#000',
+                                shadowOffset: { width: 4, height: 4 },
+                                shadowOpacity: 0.3,
+                                shadowRadius: 8,
+                                elevation: 10,
+                            }
                         ]}>
-                            {element.content}
-                        </Text>
-                    </View>
-                )}
-                {/* Delete button */}
-                {isDeleting && (
-                    <View style={styles.badgeContainer}>
-                        <Pressable onPress={onDelete} style={styles.deleteBadge}>
-                            <Text style={styles.deleteBadgeText}>×</Text>
+                            <Image
+                                source={{ uri: element.content }}
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    borderRadius: 2,
+                                }}
+                                resizeMode="contain"
+                            />
+                        </View>
+                    ) : element.type === 'sticker' ? (
+                        <View style={styles.stickerContainer}>
+                            <Text style={styles.stickerText}>{element.content}</Text>
+                        </View>
+                    ) : (
+                        <View style={[
+                            styles.textContainer,
+                            element.type === 'sticky' && {
+                                backgroundColor: element.color || '#FFFF99',
+                                borderRadius: 2,
+                                shadowColor: "#000",
+                                shadowOffset: { width: 4, height: 4 },
+                                shadowOpacity: 0.15,
+                                shadowRadius: 6,
+                                elevation: 5,
+                                minHeight: 120,
+                                minWidth: 120,
+                                justifyContent: 'center',
+                            }
+                        ]}>
+                            <Text style={[
+                                styles.diaryText,
+                                { fontFamily: element.fontFamily || "PatrickHand_400Regular" },
+                                element.type === 'sticky' && { textAlign: 'center' }
+                            ]}>
+                                {element.content}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+            </GestureDetector>
+
+            {/* Image Context Menu - Moved outside GestureDetector but inside Animated.View */}
+            {showImageMenu && element.type === 'image' && (
+                <Animated.View style={[styles.imageMenuContainer, controlStyle]}>
+
+                    <Pressable
+                        onPress={() => {
+                            console.log('Shadow pressed');
+                            onToggleShadow?.();
+                        }}
+                        style={styles.imageMenuButton}
+                    >
+                        <IconSymbol name={element.hasShadow ? "sun.max.fill" : "shadow"} size={20} color="#FF8FAB" />
+                        <Text style={styles.imageMenuText}>{element.hasShadow ? 'Remove Shadow' : 'Add Shadow'}</Text>
+                    </Pressable>
+                    <Pressable
+                        onPress={() => {
+                            console.log('Front pressed');
+                            onBringToFront?.();
+                        }}
+                        style={styles.imageMenuButton}
+                    >
+                        <IconSymbol name="square.3.layers.3d.top.filled" size={20} color="#FF8FAB" />
+                        <Text style={styles.imageMenuText}>Bring to Front</Text>
+                    </Pressable>
+                </Animated.View>
+            )}
+
+            {/* Resize Handle */}
+            {showImageMenu && element.type === 'image' && (
+                <GestureDetector gesture={resizePan}>
+                    <Animated.View style={[styles.resizeHandle, controlStyle]}>
+                        <View style={styles.resizeHandleCircle} />
+                    </Animated.View>
+                </GestureDetector>
+            )}
+
+            {/* Delete button - Moved outside GestureDetector */}
+            {isDeleting && (
+                <Animated.View style={[styles.badgeContainer, controlStyle]}>
+                    <Pressable onPress={onDelete} style={styles.deleteBadge}>
+                        <Text style={styles.deleteBadgeText}>×</Text>
+                    </Pressable>
+                    {element.type === 'text' && (
+                        <Pressable onPress={cycleFont} style={[styles.deleteBadge, { backgroundColor: '#448AFF', right: -40 }]}>
+                            <Text style={styles.deleteBadgeText}>F</Text>
                         </Pressable>
-                        {element.type === 'text' && (
-                            <Pressable onPress={cycleFont} style={[styles.deleteBadge, { backgroundColor: '#448AFF', right: -40 }]}>
-                                <Text style={styles.deleteBadgeText}>F</Text>
-                            </Pressable>
-                        )}
-                    </View>
-                )}
-            </Animated.View>
-        </GestureDetector>
+                    )}
+                </Animated.View>
+            )}
+        </Animated.View>
     );
 };
 
@@ -606,8 +775,16 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         paddingTop: 60,
+        paddingBottom: 15,
         paddingHorizontal: 20,
-        zIndex: 10,
+        zIndex: 100,
+    },
+    headerButtons: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+    headerButton: {
+        padding: 5,
     },
     backButton: {
         marginRight: 15,
@@ -623,6 +800,9 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 4,
         elevation: 4,
+        width: '100%',
+        height: '100%',
+        overflow: 'visible',
     },
     diaryImage: {
         width: 180,
@@ -818,6 +998,67 @@ const styles = StyleSheet.create({
     },
     activeTool: {
         backgroundColor: '#FF8FAB',
+    },
+    deleteButtonText: {
+        color: '#fff',
+        fontSize: 24,
+        fontWeight: 'bold',
+        lineHeight: 24,
+    },
+    imageMenuContainer: {
+        position: 'absolute',
+        top: -80,
+        left: -20,
+        backgroundColor: '#FFF0F5',
+        borderRadius: 12,
+        padding: 8,
+        gap: 8,
+        minWidth: 160,
+        shadowColor: '#FF8FAB',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 10,
+        borderWidth: 1,
+        borderColor: '#FF8FAB',
+        zIndex: 2000,
+    },
+    imageMenuButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        backgroundColor: '#fff',
+    },
+    imageMenuText: {
+        color: '#FF8FAB',
+        fontSize: 14,
+        fontFamily: 'PatrickHand_400Regular',
+    },
+    resizeHandle: {
+        position: 'absolute',
+        bottom: -15,
+        right: -15,
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1001,
+    },
+    resizeHandleCircle: {
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: '#FF8FAB',
+        borderWidth: 2,
+        borderColor: '#fff',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
     },
     toolbarSeparator: {
         width: 1,

@@ -17,12 +17,12 @@ export default function HomeScreen() {
       >
         <Text style={styles.buttonText}>Add a Memory ✨</Text>
       </Pressable>
-      <Pressable
+      {/* <Pressable
         style={[styles.button, { marginTop: 12 }]}
         onPress={() => router.push("/gallery")}
       >
         <Text style={styles.buttonText}>View Memories 💌</Text>
-      </Pressable>
+      </Pressable> */}
 
     </View>
   );

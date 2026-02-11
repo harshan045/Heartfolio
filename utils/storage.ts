@@ -19,6 +19,7 @@ export type PaperBit = {
   width?: number;
   height?: number;
   album: string;
+  isSticker?: boolean;
 };
 
 export type TodoItem = {
@@ -56,6 +57,10 @@ export type DiaryElement = {
   color?: string;
   points?: { x: number, y: number }[]; // For freehand drawing
   strokeWidth?: number; // For drawing tools
+  width?: number; // Original width for images
+  height?: number; // Original height for images
+  hasShadow?: boolean; // Shadow effect for images
+  zIndex?: number; // Layer order
 };
 
 export type DiaryEntry = {
@@ -326,9 +331,21 @@ export const saveDiaryElement = async (element: DiaryElement): Promise<void> => 
   }
 };
 
-export const saveDiaryElements = async (elements: DiaryElement[]): Promise<void> => {
+export const saveDiaryElements = async (elements: DiaryElement[], entryId?: string): Promise<void> => {
   try {
-    await AsyncStorage.setItem(DIARY_KEY, JSON.stringify(elements));
+    const jsonValue = await AsyncStorage.getItem(DIARY_KEY);
+    const allExisting: DiaryElement[] = jsonValue != null ? JSON.parse(jsonValue) : [];
+
+    let updated;
+    if (entryId) {
+      updated = [
+        ...allExisting.filter(e => e.entryId !== entryId),
+        ...elements
+      ];
+    } else {
+      updated = elements;
+    }
+    await AsyncStorage.setItem(DIARY_KEY, JSON.stringify(updated));
   } catch (error) {
     console.error('Error saving diary elements:', error);
   }
