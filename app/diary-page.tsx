@@ -28,7 +28,6 @@ import {
     deleteDiaryElement,
     DiaryElement,
     getDiaryElements,
-    PAPER_COLORS,
     saveDiaryElement,
     saveDiaryElements
 } from "../utils/storage";
@@ -46,13 +45,20 @@ export default function DiaryPageScreen() {
     const [imageMenuElementId, setImageMenuElementId] = useState<string | null>(null);
     const [isAddingText, setIsAddingText] = useState(false);
     const [modalMode, setModalMode] = useState<'text' | 'sticky' | 'sticker'>('text');
+    const [editingElementId, setEditingElementId] = useState<string | null>(null);
     const [newText, setNewText] = useState("");
     const [selectedFont, setSelectedFont] = useState(FONTS[0]);
-    const [selectedColor, setSelectedColor] = useState(PAPER_COLORS[0]);
+    const [selectedColor, setSelectedColor] = useState('#FFD1DC');
+    const [drawColor, setDrawColor] = useState('#333333');
+    // Removed dynamic width states, using fixed constants: Pen=4, Pencil=2
 
     // Drawing state
     const [isDrawMode, setIsDrawMode] = useState(false);
     const [activeTool, setActiveTool] = useState<'pencil' | 'pen' | 'eraser'>('pen');
+    // Eraser Settings
+    const [eraserSize, setEraserSize] = useState(15);
+    const [showEraserSettings, setShowEraserSettings] = useState(false);
+
     const [currentPathPoints, setCurrentPathPoints] = useState<{ x: number, y: number }[] | null>(null);
     const [paths, setPaths] = useState<DiaryElement[]>([]);
     const [redoStack, setRedoStack] = useState<{ elements: DiaryElement[], paths: DiaryElement[] }[]>([]);
@@ -132,26 +138,42 @@ export default function DiaryPageScreen() {
         try {
             if (!newText.trim() || !id) {
                 setIsAddingText(false);
+                setEditingElementId(null);
+                setNewText("");
                 return;
             }
 
-            const newEl: DiaryElement = {
-                id: `${modalMode}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                entryId: id,
-                type: modalMode,
-                content: newText.trim(),
-                x: modalMode === 'sticker' ? width / 2 - 50 : 50,
-                y: modalMode === 'sticker' ? height / 2 - 50 : 100,
-                rotation: modalMode === 'sticker' ? 0 : Math.random() * 6 - 3,
-                scale: modalMode === 'sticker' ? 2 : 1,
-                fontFamily: selectedFont,
-                color: modalMode === 'sticky' ? selectedColor : undefined,
-            };
+            if (editingElementId) {
+                const element = elements.find(e => e.id === editingElementId);
+                if (element) {
+                    await updateElement(element, {
+                        content: newText.trim(),
+                        fontFamily: selectedFont,
+                        color: selectedColor,
+                    }, false);
+                }
+            } else {
+                const newEl: DiaryElement = {
+                    id: `${modalMode}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    entryId: id,
+                    type: modalMode,
+                    content: newText.trim(),
+                    x: modalMode === 'sticker' ? width / 2 - 50 : 50,
+                    y: modalMode === 'sticker' ? height / 2 - 50 : 100,
+                    rotation: modalMode === 'sticker' ? 0 : Math.random() * 6 - 3,
+                    scale: modalMode === 'sticker' ? 2 : 1,
+                    fontFamily: selectedFont,
+                    color: selectedColor,
+                    fontWeight: "normal",
+                };
 
-            pushToHistory(elements, paths);
-            setElements([...elements, newEl]);
+                pushToHistory(elements, paths);
+                setElements([...elements, newEl]);
+            }
+
             setNewText("");
             setIsAddingText(false);
+            setEditingElementId(null);
         } catch (error) {
             console.error('Error adding text:', error);
         }
@@ -163,13 +185,17 @@ export default function DiaryPageScreen() {
             return;
         }
 
+        // Fixed widths: Pen=4, Pencil=2, Eraser=variable
+        const currentWidth = activeTool === 'pen' ? 4 : (activeTool === 'pencil' ? 2 : eraserSize);
+        const currentColor = activeTool === 'eraser' ? '#FDF6F0' : drawColor;
+
         const newPath: DiaryElement = {
             id: `path_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             entryId: id,
             type: 'path',
             content: '',
-            strokeWidth: activeTool === 'pen' ? 4 : (activeTool === 'pencil' ? 2 : 15),
-            color: activeTool === 'eraser' ? '#FDF6F0' : (activeTool === 'pencil' ? '#888' : '#333'),
+            strokeWidth: currentWidth,
+            color: currentColor,
             points: pointsToSave,
             x: 0,
             y: 0,
@@ -261,6 +287,26 @@ export default function DiaryPageScreen() {
         setImageMenuElementId(null);
     };
 
+    const openAddModal = (mode: 'text' | 'sticky' | 'sticker') => {
+        setModalMode(mode);
+        setEditingElementId(null);
+        setNewText("");
+        setSelectedFont(FONTS[0]);
+        setSelectedColor(mode === 'text' ? '#333333' : '#FFD1DC');
+        setIsAddingText(true);
+    };
+
+    const handleEdit = (el: DiaryElement) => {
+        if (el.type === 'image' || el.type === 'path') return;
+        setEditingElementId(el.id);
+        setModalMode(el.type);
+        setNewText(el.content);
+        setSelectedFont(el.fontFamily || FONTS[0]);
+        setSelectedColor(el.color || (el.type === 'text' ? '#333333' : '#FFD1DC'));
+        // Default to normal weight as boldness control is removed
+        setIsAddingText(true);
+    };
+
     const handleDelete = async (elementId: string) => {
         pushToHistory(elements, paths);
         await deleteDiaryElement(elementId);
@@ -312,6 +358,7 @@ export default function DiaryPageScreen() {
                             element={el}
                             onUpdate={updateElement}
                             onDelete={() => handleDelete(el.id)}
+                            onEdit={() => handleEdit(el)}
                             disabled={isDrawMode}
                             isDeleting={deletingElementId === el.id}
                             onSetDeleting={(id) => setDeletingElementId(id)}
@@ -338,8 +385,8 @@ export default function DiaryPageScreen() {
                         {currentPathPoints && (
                             <Path
                                 d={`M ${currentPathPoints.map(p => `${p.x} ${p.y}`).join(' L ')}`}
-                                stroke={activeTool === 'eraser' ? '#FDF6F0' : (activeTool === 'pencil' ? '#888' : '#333')}
-                                strokeWidth={activeTool === 'pen' ? 4 : (activeTool === 'pencil' ? 2 : 15)}
+                                stroke={activeTool === 'eraser' ? '#FDF6F0' : drawColor}
+                                strokeWidth={activeTool === 'pen' ? 4 : (activeTool === 'pencil' ? 2 : eraserSize)}
                                 fill="none"
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
@@ -358,6 +405,17 @@ export default function DiaryPageScreen() {
 
             {isDrawMode ? (
                 <View style={styles.drawingToolbar}>
+                    {/* Eraser Settings Popup */}
+                    {showEraserSettings && (
+                        <View style={{ position: 'absolute', bottom: 70, left: 100, flexDirection: 'row', backgroundColor: '#FFF', padding: 10, borderRadius: 12, elevation: 5, gap: 10 }}>
+                            {[10, 20, 30, 40].map(size => (
+                                <Pressable key={size} onPress={() => { setEraserSize(size); setShowEraserSettings(false); setActiveTool('eraser'); }}>
+                                    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: '#ddd', borderWidth: eraserSize === size ? 2 : 0, borderColor: '#FF8FAB' }} />
+                                </Pressable>
+                            ))}
+                        </View>
+                    )}
+
                     <Pressable
                         style={[styles.toolButton, activeTool === 'pencil' && styles.activeTool]}
                         onPress={() => setActiveTool('pencil')}
@@ -373,10 +431,28 @@ export default function DiaryPageScreen() {
                     </Pressable>
                     <Pressable
                         style={[styles.toolButton, activeTool === 'eraser' && styles.activeTool]}
-                        onPress={() => setActiveTool('eraser')}
+                        onPress={() => { setActiveTool('eraser'); setShowEraserSettings(false); }}
+                        onLongPress={() => { setActiveTool('eraser'); setShowEraserSettings(true); }}
                     >
                         <IconSymbol name="eraser" size={24} color={activeTool === 'eraser' ? "#fff" : "#333"} />
                     </Pressable>
+
+                    <View style={styles.toolbarSeparator} />
+
+                    <View style={styles.inkContainer}>
+                        <Pressable
+                            style={[styles.inkButton, drawColor === '#333333' && styles.activeInk]}
+                            onPress={() => setDrawColor('#333333')}
+                        >
+                            <View style={[styles.inkDot, { backgroundColor: '#333333' }]} />
+                        </Pressable>
+                        <Pressable
+                            style={[styles.inkButton, drawColor === '#FFFFFF' && styles.activeInk]}
+                            onPress={() => setDrawColor('#FFFFFF')}
+                        >
+                            <View style={[styles.inkDot, { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#ccc' }]} />
+                        </Pressable>
+                    </View>
 
                     <View style={styles.toolbarSeparator} />
 
@@ -395,13 +471,13 @@ export default function DiaryPageScreen() {
                     >
                         <IconSymbol name="hand.draw" size={24} color="#fff" />
                     </Pressable>
-                    <Pressable style={styles.fab} onPress={() => { setModalMode('text'); setIsAddingText(true); }}>
+                    <Pressable style={styles.fab} onPress={() => openAddModal('text')}>
                         <IconSymbol name="text.justify.left" size={24} color="#fff" />
                     </Pressable>
-                    <Pressable style={[styles.fab, { backgroundColor: '#FFCCF9' }]} onPress={() => { setModalMode('sticky'); setIsAddingText(true); }}>
+                    <Pressable style={[styles.fab, { backgroundColor: '#FFCCF9' }]} onPress={() => openAddModal('sticky')}>
                         <IconSymbol name="note.text" size={24} color="#fff" />
                     </Pressable>
-                    <Pressable style={[styles.fab, { backgroundColor: '#C1E1C1' }]} onPress={() => { setModalMode('sticker'); setIsAddingText(true); }}>
+                    <Pressable style={[styles.fab, { backgroundColor: '#C1E1C1' }]} onPress={() => openAddModal('sticker')}>
                         <IconSymbol name="face.smiling" size={24} color="#fff" />
                     </Pressable>
                     <Pressable style={[styles.fab, { backgroundColor: '#FFB7B2' }]} onPress={addImage}>
@@ -435,9 +511,30 @@ export default function DiaryPageScreen() {
                         />
 
                         {modalMode !== 'sticker' && (
+                            <View style={styles.colorTriggerSection}>
+                                <Text style={styles.pickerLabel}>Choose Color:</Text>
+                                <View style={styles.colorPickerRow}>
+                                    <View style={styles.multiColorWrapper}>
+                                        {(modalMode === 'sticky' ? ['#FFD1DC', '#B2EBF2', '#C8E6C9', '#FFF9C4', '#D1C4E9', '#FFFFFF', '#333333'] : ['#333333', '#FFFFFF']).map(color => (
+                                            <Pressable
+                                                key={color}
+                                                style={[
+                                                    styles.colorCircle,
+                                                    { backgroundColor: color },
+                                                    selectedColor === color && styles.selectedCircle
+                                                ]}
+                                                onPress={() => setSelectedColor(color)}
+                                            />
+                                        ))}
+                                    </View>
+                                </View>
+                            </View>
+                        )}
+
+                        {modalMode !== 'sticker' && (
                             <View style={styles.pickerSection}>
-                                <Text style={styles.pickerLabel}>Font:</Text>
-                                <View style={styles.fontContainer}>
+                                <Text style={styles.pickerLabel}>Style:</Text>
+                                <View style={styles.styleContainer}>
                                     {FONTS.map(font => (
                                         <Pressable
                                             key={font}
@@ -451,30 +548,12 @@ export default function DiaryPageScreen() {
                             </View>
                         )}
 
-                        {modalMode === 'sticky' && (
-                            <View style={styles.pickerSection}>
-                                <Text style={styles.pickerLabel}>Color:</Text>
-                                <View style={styles.colorContainer}>
-                                    {PAPER_COLORS.map(color => (
-                                        <Pressable
-                                            key={color}
-                                            style={[
-                                                styles.colorCircle,
-                                                { backgroundColor: color, borderWidth: selectedColor === color ? 2 : 0 }
-                                            ]}
-                                            onPress={() => setSelectedColor(color)}
-                                        />
-                                    ))}
-                                </View>
-                            </View>
-                        )}
-
                         <View style={styles.modalButtons}>
                             <Pressable style={[styles.modalButton, styles.cancelButton]} onPress={() => setIsAddingText(false)}>
                                 <Text style={styles.buttonText}>Cancel</Text>
                             </Pressable>
                             <Pressable style={[styles.modalButton, styles.saveButton]} onPress={addText}>
-                                <Text style={styles.buttonText}>Add to Page</Text>
+                                <Text style={styles.buttonText}>{editingElementId ? "Save Changes" : "Add to Page"}</Text>
                             </Pressable>
                         </View>
                     </View>
@@ -482,7 +561,7 @@ export default function DiaryPageScreen() {
             </Modal>
 
 
-        </GestureHandlerRootView>
+        </GestureHandlerRootView >
     );
 }
 
@@ -497,10 +576,12 @@ const DraggableElement = ({
     onSetImageMenu,
     onToggleShadow,
     onBringToFront,
+    onEdit,
 }: {
     element: DiaryElement,
     onUpdate: (el: DiaryElement, updates: Partial<DiaryElement>) => void,
     onDelete: () => void,
+    onEdit: () => void,
     disabled?: boolean,
     isDeleting?: boolean,
     onSetDeleting: (id: string | null) => void,
@@ -606,10 +687,16 @@ const DraggableElement = ({
             }
         }), [element.id, element.type, disabled, onSetDeleting, onSetImageMenu]);
 
+    const editTap = React.useMemo(() => Gesture.Tap()
+        .enabled(!disabled && (element.type === 'text' || element.type === 'sticky' || element.type === 'sticker'))
+        .onEnd(() => {
+            runOnJS(onEdit)();
+        }), [element.type, disabled, onEdit]);
+
     const gesture = React.useMemo(() => Gesture.Simultaneous(
-        Gesture.Exclusive(longPress, pan),
+        Gesture.Exclusive(longPress, editTap, pan),
         Gesture.Simultaneous(pinch, rotate)
-    ), [longPress, pan, pinch, rotate]);
+    ), [longPress, editTap, pan, pinch, rotate]);
 
     const animatedStyle = useAnimatedStyle(() => {
         return {
@@ -689,7 +776,11 @@ const DraggableElement = ({
                         ]}>
                             <Text style={[
                                 styles.diaryText,
-                                { fontFamily: element.fontFamily || "PatrickHand_400Regular" },
+                                {
+                                    fontFamily: element.fontFamily || "PatrickHand_400Regular",
+                                    color: element.type === 'text' ? (element.color || '#333') : '#444',
+                                    fontWeight: element.fontWeight || 'normal'
+                                },
                                 element.type === 'sticky' && { textAlign: 'center' }
                             ]}>
                                 {element.content}
@@ -855,12 +946,6 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 10,
     },
-    colorCircle: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderColor: '#333',
-    },
     fabContainer: {
         position: 'absolute',
         bottom: 30,
@@ -974,19 +1059,19 @@ const styles = StyleSheet.create({
     drawingToolbar: {
         position: 'absolute',
         bottom: 30,
-        left: 20,
-        right: 20,
+        left: 10,
+        right: 10,
         flexDirection: 'row',
-        justifyContent: 'center',
-        gap: 20,
+        justifyContent: 'space-evenly',
+        alignItems: 'center',
         backgroundColor: '#fff',
-        padding: 10,
-        borderRadius: 30,
+        padding: 8,
+        borderRadius: 40,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 5,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 10,
     },
     toolButton: {
         width: 50,
@@ -1076,5 +1161,52 @@ const styles = StyleSheet.create({
         fontSize: 22,
         fontFamily: "PatrickHand_400Regular",
         color: '#999',
+    },
+    colorPickerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
+    colorCircle: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: '#eee' },
+    selectedCircle: { borderColor: '#FF8FAB', transform: [{ scale: 1.1 }] },
+    colorStrip: { flexDirection: 'row', gap: 8, paddingHorizontal: 5 },
+    drawColorDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: 'transparent' },
+    activeDrawColor: { borderColor: '#fff' },
+    colorTriggerSection: { marginTop: 15, marginBottom: 5 },
+    multiColorWrapper: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 10, borderRadius: 25, backgroundColor: '#f9f9f9', borderWidth: 2, borderColor: '#FFB7CE' },
+    multiColorCircle: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: '#eee', padding: 2 },
+    multiColorInside: { flex: 1, borderRadius: 15, borderWidth: 2, borderColor: '#fff', borderStyle: 'dotted' },
+    inkContainer: { flexDirection: 'row', gap: 12 },
+    inkButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'transparent' },
+    activeInk: { borderColor: '#FF8FAB' },
+    inkDot: { width: 30, height: 30, borderRadius: 15 },
+    widthPickerOverlay: {
+        position: 'absolute',
+        top: -70,
+        backgroundColor: '#fff',
+        borderRadius: 25,
+        padding: 10,
+        flexDirection: 'row',
+        gap: 15,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 5,
+        elevation: 10,
+        alignItems: 'center',
+    },
+    widthDot: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#eee',
+    },
+    activeWidthDot: {
+        borderColor: '#FF8FAB',
+        backgroundColor: '#FFF0F5',
+    },
+    styleContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 15,
     },
 });

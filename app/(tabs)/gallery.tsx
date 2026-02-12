@@ -279,9 +279,9 @@ export default function PolaroidGallery() {
                 <Text style={styles.galleryTitle}>
                   {selectedAlbum ? selectedAlbum : "My Memories 💌"}
                 </Text>
-                {selectedAlbum && (
+                {/* {selectedAlbum && (
                   <Text style={styles.editHint}>Tap to rename</Text>
-                )}
+                )} */}
               </Pressable>
             )}
             {selectedAlbum && (

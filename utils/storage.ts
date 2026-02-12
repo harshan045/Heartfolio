@@ -61,6 +61,7 @@ export type DiaryElement = {
   height?: number; // Original height for images
   hasShadow?: boolean; // Shadow effect for images
   zIndex?: number; // Layer order
+  fontWeight?: "normal" | "bold"; // For text boldness
 };
 
 export type DiaryEntry = {
