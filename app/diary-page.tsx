@@ -15,8 +15,7 @@ import {
 } from "react-native";
 import {
     Gesture,
-    GestureDetector,
-    GestureHandlerRootView
+    GestureDetector
 } from "react-native-gesture-handler";
 import Animated, {
     runOnJS,
@@ -24,6 +23,7 @@ import Animated, {
     useSharedValue
 } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
+import { auth } from "../firebaseConfig";
 import {
     deleteDiaryElement,
     DiaryElement,
@@ -49,15 +49,12 @@ export default function DiaryPageScreen() {
     const [newText, setNewText] = useState("");
     const [selectedFont, setSelectedFont] = useState(FONTS[0]);
     const [selectedColor, setSelectedColor] = useState('#FFD1DC');
-    const [drawColor, setDrawColor] = useState('#333333');
+    // Ink color is now fixed to black (#000000)
     // Removed dynamic width states, using fixed constants: Pen=4, Pencil=2
 
     // Drawing state
     const [isDrawMode, setIsDrawMode] = useState(false);
-    const [activeTool, setActiveTool] = useState<'pencil' | 'pen' | 'eraser'>('pen');
-    // Eraser Settings
-    const [eraserSize, setEraserSize] = useState(15);
-    const [showEraserSettings, setShowEraserSettings] = useState(false);
+    const [activeTool, setActiveTool] = useState<'pencil' | 'pen'>('pen');
 
     const [currentPathPoints, setCurrentPathPoints] = useState<{ x: number, y: number }[] | null>(null);
     const [paths, setPaths] = useState<DiaryElement[]>([]);
@@ -66,9 +63,19 @@ export default function DiaryPageScreen() {
 
     // Shared value to accumulate points efficiently during drawing
     const activePointsSV = useSharedValue<{ x: number, y: number }[]>([]);
+    const isDrawing = useSharedValue(false);
+    const cursorPos = useSharedValue({ x: 0, y: 0 });
 
     const loadElements = async () => {
-        if (!id) return;
+        const uid = auth.currentUser?.uid;
+        if (!uid || !id) {
+            console.log('[DIARY_PAGE] No UID or Page ID, skipping load');
+            setElements([]);
+            setPaths([]);
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         const stored = await getDiaryElements(id);
         setElements(stored.filter(e => e.type !== 'path'));
@@ -185,9 +192,9 @@ export default function DiaryPageScreen() {
             return;
         }
 
-        // Fixed widths: Pen=4, Pencil=2, Eraser=variable
-        const currentWidth = activeTool === 'pen' ? 4 : (activeTool === 'pencil' ? 2 : eraserSize);
-        const currentColor = activeTool === 'eraser' ? '#FDF6F0' : drawColor;
+        // Fixed widths: Pen=4, Pencil=2
+        const currentWidth = activeTool === 'pen' ? 4 : 2;
+        const currentOpacity = activeTool === 'pencil' ? 0.6 : 1;
 
         const newPath: DiaryElement = {
             id: `path_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -195,12 +202,13 @@ export default function DiaryPageScreen() {
             type: 'path',
             content: '',
             strokeWidth: currentWidth,
-            color: currentColor,
+            color: '#000000',
             points: pointsToSave,
             x: 0,
             y: 0,
             rotation: 0,
             scale: 1,
+            opacity: currentOpacity,
         };
 
         try {
@@ -217,19 +225,24 @@ export default function DiaryPageScreen() {
     const drawPan = React.useMemo(() => Gesture.Pan()
         .enabled(isDrawMode)
         .onStart((e) => {
+            isDrawing.value = true;
+            cursorPos.value = { x: e.x, y: e.y };
             activePointsSV.value = [{ x: e.x, y: e.y }];
             runOnJS(setCurrentPathPoints)([{ x: e.x, y: e.y }]);
         })
         .onUpdate((e) => {
+            cursorPos.value = { x: e.x, y: e.y };
             const nextPoints = [...activePointsSV.value, { x: e.x, y: e.y }];
             activePointsSV.value = nextPoints;
             runOnJS(setCurrentPathPoints)(nextPoints);
         })
         .onEnd(() => {
+            isDrawing.value = false;
             const pointsToSave = activePointsSV.value;
             runOnJS(finalizePath)(pointsToSave);
             activePointsSV.value = [];
         }), [isDrawMode, activeTool, id]);
+
 
     const handleUndo = async () => {
         if (history.length === 0) return;
@@ -323,7 +336,7 @@ export default function DiaryPageScreen() {
     }
 
     return (
-        <GestureHandlerRootView style={styles.container}>
+        <View style={styles.container}>
             <View style={styles.ruledBackground}>
                 {Array.from({ length: 50 }).map((_, i) => (
                     <View key={i} style={styles.line} />
@@ -369,24 +382,32 @@ export default function DiaryPageScreen() {
                         />
                     ))}
 
-                    {/* Drawing Layer */}
-                    <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-                        {paths.map(path => (
-                            <Path
-                                key={path.id}
-                                d={`M ${path.points?.map(p => `${p.x} ${p.y}`).join(' L ')}`}
-                                stroke={path.color}
-                                strokeWidth={path.strokeWidth}
-                                fill="none"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            />
-                        ))}
-                        {currentPathPoints && (
+                    {/* Drawing Layer - Layered ink (Top-down rendering) */}
+                    <Svg style={StyleSheet.absoluteFill} width={width} height={height} pointerEvents="none">
+                        {paths.map(path => {
+                            const d = (path.points && path.points.length > 0)
+                                ? `M ${path.points.map(p => `${p.x} ${p.y}`).join(' L ')}`
+                                : '';
+                            if (!d) return null;
+                            return (
+                                <Path
+                                    key={path.id}
+                                    d={d}
+                                    stroke={path.color}
+                                    strokeWidth={path.strokeWidth}
+                                    strokeOpacity={path.opacity ?? 1}
+                                    fill="none"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                />
+                            );
+                        })}
+                        {currentPathPoints && currentPathPoints.length > 0 && (
                             <Path
                                 d={`M ${currentPathPoints.map(p => `${p.x} ${p.y}`).join(' L ')}`}
-                                stroke={activeTool === 'eraser' ? '#FDF6F0' : drawColor}
-                                strokeWidth={activeTool === 'pen' ? 4 : (activeTool === 'pencil' ? 2 : eraserSize)}
+                                stroke="#000000"
+                                strokeWidth={activeTool === 'pen' ? 4 : 2}
+                                strokeOpacity={activeTool === 'pencil' ? 0.6 : 1}
                                 fill="none"
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
@@ -399,6 +420,8 @@ export default function DiaryPageScreen() {
                             <View style={StyleSheet.absoluteFill} />
                         </GestureDetector>
                     )}
+
+                    {/* Eraser Cursor - Removed */}
                 </View>
             </GestureDetector>
 
@@ -406,16 +429,6 @@ export default function DiaryPageScreen() {
             {isDrawMode ? (
                 <View style={styles.drawingToolbar}>
                     {/* Eraser Settings Popup */}
-                    {showEraserSettings && (
-                        <View style={{ position: 'absolute', bottom: 70, left: 100, flexDirection: 'row', backgroundColor: '#FFF', padding: 10, borderRadius: 12, elevation: 5, gap: 10 }}>
-                            {[10, 20, 30, 40].map(size => (
-                                <Pressable key={size} onPress={() => { setEraserSize(size); setShowEraserSettings(false); setActiveTool('eraser'); }}>
-                                    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: '#ddd', borderWidth: eraserSize === size ? 2 : 0, borderColor: '#FF8FAB' }} />
-                                </Pressable>
-                            ))}
-                        </View>
-                    )}
-
                     <Pressable
                         style={[styles.toolButton, activeTool === 'pencil' && styles.activeTool]}
                         onPress={() => setActiveTool('pencil')}
@@ -427,32 +440,7 @@ export default function DiaryPageScreen() {
                         onPress={() => setActiveTool('pen')}
                     >
                         <IconSymbol name="pencil.tip" size={24} color={activeTool === 'pen' ? "#fff" : "#333"} />
-                        <View style={{ position: 'absolute', bottom: 5, width: 4, height: 4, borderRadius: 2, backgroundColor: activeTool === 'pen' ? '#fff' : '#333' }} />
                     </Pressable>
-                    <Pressable
-                        style={[styles.toolButton, activeTool === 'eraser' && styles.activeTool]}
-                        onPress={() => { setActiveTool('eraser'); setShowEraserSettings(false); }}
-                        onLongPress={() => { setActiveTool('eraser'); setShowEraserSettings(true); }}
-                    >
-                        <IconSymbol name="eraser" size={24} color={activeTool === 'eraser' ? "#fff" : "#333"} />
-                    </Pressable>
-
-                    <View style={styles.toolbarSeparator} />
-
-                    <View style={styles.inkContainer}>
-                        <Pressable
-                            style={[styles.inkButton, drawColor === '#333333' && styles.activeInk]}
-                            onPress={() => setDrawColor('#333333')}
-                        >
-                            <View style={[styles.inkDot, { backgroundColor: '#333333' }]} />
-                        </Pressable>
-                        <Pressable
-                            style={[styles.inkButton, drawColor === '#FFFFFF' && styles.activeInk]}
-                            onPress={() => setDrawColor('#FFFFFF')}
-                        >
-                            <View style={[styles.inkDot, { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#ccc' }]} />
-                        </Pressable>
-                    </View>
 
                     <View style={styles.toolbarSeparator} />
 
@@ -561,7 +549,7 @@ export default function DiaryPageScreen() {
             </Modal>
 
 
-        </GestureHandlerRootView >
+        </View >
     );
 }
 

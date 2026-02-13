@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Dimensions,
   Image,
   Modal,
@@ -31,6 +32,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { auth } from "../../firebaseConfig";
+import { clearUserWorkspace, getScopedKey, getStorageData } from "../../utils/storage";
 
 const { width } = Dimensions.get("window");
 
@@ -159,6 +161,10 @@ const DraggableSticker = ({
     };
   });
 
+  const resizeDotStyle = useAnimatedStyle(() => ({
+    opacity: isActive.value,
+  }));
+
   return (
     <Animated.View style={[styles.stickerWrapper, style]}>
       <GestureDetector gesture={composed}>
@@ -178,7 +184,7 @@ const DraggableSticker = ({
       {/* Resize Dot */}
       {!sticker.isCircle && (
         <GestureDetector gesture={resizePan}>
-          <Animated.View style={[styles.resizeDot, useAnimatedStyle(() => ({ opacity: isActive.value }))]}>
+          <Animated.View style={[styles.resizeDot, resizeDotStyle]}>
             <View style={styles.dotInner} />
           </Animated.View>
         </GestureDetector>
@@ -352,34 +358,49 @@ export default function HomeScreen() {
   useEffect(() => {
     load();
     flow.value = withRepeat(withTiming(1, { duration: 3000 }), -1, true);
-  }, []);
+  }, [auth.currentUser?.uid]);
 
   const load = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      console.log('[HOME] No UID, resetting to defaults');
+      setName("Sweetie");
+      setBio("Welcome to my Heartfolio! 🌸");
+      setBanner("https://images.unsplash.com/photo-1542332213-31f87348057f?q=80&w=2670&auto=format&fit=crop");
+      setStickers([]);
+      setDecoPos({});
+      return;
+    }
+
     try {
+      console.log('Loading Home Data for UID:', uid);
       const [n, b, s, d, bi] = await Promise.all([
-        AsyncStorage.getItem("userNickname"),
-        AsyncStorage.getItem("userBanner"),
-        AsyncStorage.getItem("dynamicStickers"),
-        AsyncStorage.getItem("decoPositions"),
-        AsyncStorage.getItem("userBio")
+        getStorageData("userNickname"),
+        getStorageData("userBanner"),
+        getStorageData("dynamicStickers"),
+        getStorageData("decoPositions"),
+        getStorageData("userBio")
       ]);
+
       if (n) setName(n);
       if (bi) setBio(bi);
       if (b) setBanner(b);
       if (s) setStickers(JSON.parse(s));
       if (d) setDecoPos(JSON.parse(d));
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error('[HOME] Load error:', e);
+    }
   };
 
   const syncS = (newS: StickerData[]) => {
     setStickers(newS);
-    AsyncStorage.setItem("dynamicStickers", JSON.stringify(newS));
+    AsyncStorage.setItem(getScopedKey("dynamicStickers"), JSON.stringify(newS));
   };
 
   const updateS = (id: string, up: Partial<StickerData>) => {
     setStickers(prev => {
       const resp = prev.map(item => item.id === id ? { ...item, ...up } : item);
-      AsyncStorage.setItem("dynamicStickers", JSON.stringify(resp));
+      AsyncStorage.setItem(getScopedKey("dynamicStickers"), JSON.stringify(resp));
       return resp;
     });
   };
@@ -387,7 +408,7 @@ export default function HomeScreen() {
   const updateD = (id: string, up: any) => {
     setDecoPos(prev => {
       const resp = { ...prev, [id]: { ...(prev as any)[id], ...up } };
-      AsyncStorage.setItem("decoPositions", JSON.stringify(resp));
+      AsyncStorage.setItem(getScopedKey("decoPositions"), JSON.stringify(resp));
       return resp;
     });
   };
@@ -414,7 +435,10 @@ export default function HomeScreen() {
 
   const pickBanner = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [16, 9], quality: 0.8 });
-    if (!res.canceled) { setBanner(res.assets[0].uri); AsyncStorage.setItem("userBanner", res.assets[0].uri); }
+    if (!res.canceled) {
+      setBanner(res.assets[0].uri);
+      AsyncStorage.setItem(getScopedKey("userBanner"), res.assets[0].uri);
+    }
   };
 
   return (
@@ -511,8 +535,8 @@ export default function HomeScreen() {
               <Text style={{ fontSize: 18, textAlign: 'center', color: '#666', fontFamily: 'PatrickHand_400Regular', marginBottom: 20 }}>
                 AskChatGPT not me!
               </Text>
-              <Pressable style={[styles.btn, styles.sve]} onPress={() => setShowHelp(false)}>
-                <Text style={{ color: "#727171ff", fontWeight: "900" }}>Got it!</Text>
+              <Pressable style={[styles.btn, styles.sve, { flex: 0, width: '100%' }]} onPress={() => setShowHelp(false)}>
+                <Text style={styles.sveText}>Got it!</Text>
               </Pressable>
             </View>
           </View>
@@ -556,6 +580,23 @@ export default function HomeScreen() {
             <View style={styles.menu}>
               <Pressable style={styles.mi} onPress={() => { setIsSettings(false); setIsEdit(true); setTempNick(name); setTempBio(bio); }}><Text>Edit Profile</Text></Pressable>
               <Pressable style={styles.mi} onPress={() => { setIsSettings(false); setShowHelp(true); }}><Text>Help</Text></Pressable>
+              <Pressable style={styles.mi} onPress={() => {
+                setIsSettings(false);
+                Alert.alert(
+                  "Clear Workspace",
+                  "Are you sure you want to delete all data for THIS account only? This cannot be undone.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Clear Account Data", style: "destructive", onPress: async () => {
+                        await clearUserWorkspace();
+                        load(); // Reload to show empty state
+                        Alert.alert("Success", "Account data cleared.");
+                      }
+                    }
+                  ]
+                );
+              }}><Text style={{ color: "#FF8FAB" }}>Clear My Account Data</Text></Pressable>
               <Pressable style={styles.mi} onPress={() => { setIsSettings(false); signOut(auth); }}><Text style={{ color: "red" }}>Logout</Text></Pressable>
             </View>
           </Pressable>
@@ -573,6 +614,9 @@ export default function HomeScreen() {
               <Pressable style={[styles.btn, styles.sve]} onPress={() => {
                 setName(tempNick);
                 setBio(tempBio);
+                AsyncStorage.setItem(getScopedKey("userNickname"), tempNick);
+                AsyncStorage.setItem(getScopedKey("userBio"), tempBio);
+                setIsEdit(false);
               }}><Text style={{ color: "#FFF" }}>Save</Text></Pressable>
             </View>
           </View></View>
@@ -584,7 +628,7 @@ export default function HomeScreen() {
             <View style={styles.box}>
               <Text style={styles.title}>Sticker Options ✨</Text>
 
-              <Pressable style={[styles.btn, styles.sve, { marginBottom: 15 }]} onPress={() => {
+              <Pressable onPress={() => {
                 const item = stickers.find(s => s.id === menuStickerId);
                 if (item) {
                   setStkId(item.id);
@@ -596,7 +640,6 @@ export default function HomeScreen() {
                 }
                 setMenuStickerId(null);
               }}>
-                <Text style={{ color: "#FFF", fontWeight: "900" }}>✏️ Edit Content</Text>
               </Pressable>
 
               <Text style={styles.label}>Resize:</Text>
@@ -618,7 +661,7 @@ export default function HomeScreen() {
                   if (menuStickerId) syncS(stickers.filter(s => s.id !== menuStickerId));
                   setMenuStickerId(null);
                 }}>
-                  <Text style={{ color: "#EF4444", fontWeight: "900" }}>🗑️ Delete</Text>
+                  <Text style={{ color: "#EF4444", fontWeight: "900" }}>❌</Text>
                 </Pressable>
                 <Pressable style={[styles.btn, styles.can]} onPress={() => setMenuStickerId(null)}>
                   <Text>Cancel</Text>
@@ -668,9 +711,10 @@ const styles = StyleSheet.create({
   dot: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: "transparent" },
   active: { borderColor: "#FFB7CE" },
   btns: { flexDirection: "row", gap: 10 },
-  btn: { flex: 1, padding: 15, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  btn: { flex: 1, padding: 15, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#0c0c0cff" },
   can: { backgroundColor: "#F1F5F9" },
-  sve: { backgroundColor: "#FFB7CEff" },
+  sve: { backgroundColor: "#fc8fb1ff" },
+  sveText: { color: "#ffffff", fontWeight: "900" },
   del: { flex: 0.3, backgroundColor: "#FEF2F2" },
   menu: { position: "absolute", top: 70, right: 30, backgroundColor: "#FFF", borderRadius: 20, padding: 10, elevation: 20 },
   mi: { padding: 15 },

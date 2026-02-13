@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useState } from "react";
 import {
     ActivityIndicator,
     Modal,
@@ -9,13 +9,14 @@ import {
     TextInput,
     View
 } from "react-native";
-import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
     useAnimatedScrollHandler,
     useAnimatedStyle,
     useSharedValue,
     withSpring
 } from "react-native-reanimated";
+import { auth } from "../../firebaseConfig";
 import {
     deleteDiaryEntry,
     DiaryEntry,
@@ -62,6 +63,14 @@ export default function DiaryListView() {
     });
 
     const loadEntries = async () => {
+        const uid = auth.currentUser?.uid;
+        if (!uid) {
+            console.log('[DIARY] No UID, resetting state');
+            setEntries([]);
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         const stored = await getDiaryEntries();
         setEntries(stored);
@@ -69,9 +78,9 @@ export default function DiaryListView() {
     };
 
     useFocusEffect(
-        useCallback(() => {
+        React.useCallback(() => {
             loadEntries();
-        }, [])
+        }, [auth.currentUser?.uid])
     );
 
     const handleCreateEntry = async () => {
@@ -110,88 +119,96 @@ export default function DiaryListView() {
     }
 
     return (
-        <GestureHandlerRootView style={styles.container}>
-            <View style={styles.container}>
-                <Text style={styles.title}>My Pages</Text>
+        <View style={styles.container}>
+            <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={() => setDeletingId(null)}
+            />
+            <Text style={styles.title}>My Pages</Text>
 
-                <GestureDetector gesture={composed}>
-                    <Animated.FlatList
-                        data={entries}
-                        keyExtractor={(item) => item.id}
-                        onScroll={scrollHandler}
-                        scrollEventThrottle={16}
-                        contentContainerStyle={styles.listContent}
-                        renderItem={({ item, index }) => (
-                            <DiaryCard
-                                item={item}
-                                index={index}
-                                total={entries.length}
-                                expandAmount={expandAmount}
-                                isDeleting={deletingId === item.id}
-                                onPress={() => router.push({ pathname: "/diary-page", params: { id: item.id, title: item.title } })}
-                                onLongPress={() => setDeletingId(item.id)}
-                                onDelete={() => {
-                                    handleDeleteEntry(item.id);
+            <GestureDetector gesture={composed}>
+                <Animated.FlatList
+                    data={entries}
+                    keyExtractor={(item) => item.id}
+                    onScroll={scrollHandler}
+                    scrollEventThrottle={16}
+                    contentContainerStyle={styles.listContent}
+                    renderItem={({ item, index }) => (
+                        <DiaryCard
+                            item={item}
+                            index={index}
+                            total={entries.length}
+                            expandAmount={expandAmount}
+                            isDeleting={deletingId === item.id}
+                            onPress={() => {
+                                if (deletingId) {
                                     setDeletingId(null);
-                                }}
-                            />
-                        )}
-                        ListEmptyComponent={
-                            <View style={styles.emptyContainer}>
-                                <Text style={styles.emptyText}>No diaries yet.</Text>
-                                <Text style={styles.emptySubText}>Create your first one below!</Text>
-                            </View>
-                        }
-                    />
-                </GestureDetector>
+                                } else {
+                                    router.push({ pathname: "/diary-page", params: { id: item.id, title: item.title } });
+                                }
+                            }}
+                            onLongPress={() => setDeletingId(item.id)}
+                            onDelete={() => {
+                                handleDeleteEntry(item.id);
+                                setDeletingId(null);
+                            }}
+                        />
+                    )}
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <Text style={styles.emptyText}>No diaries yet.</Text>
+                            <Text style={styles.emptySubText}>Create your first one below!</Text>
+                        </View>
+                    }
+                />
+            </GestureDetector>
 
-                <Pressable style={styles.fab} onPress={() => setIsAddingEntry(true)}>
-                    <Text style={styles.fabText}>+</Text>
-                </Pressable>
+            <Pressable style={styles.fab} onPress={() => setIsAddingEntry(true)}>
+                <Text style={styles.fabText}>+</Text>
+            </Pressable>
 
-                <Modal
-                    animationType="fade"
-                    transparent={true}
-                    visible={isAddingEntry}
-                    onRequestClose={() => setIsAddingEntry(false)}
-                >
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.modalTitle}>New Diary Entry</Text>
-                            <TextInput
-                                style={styles.textInput}
-                                value={newTitle}
-                                onChangeText={setNewTitle}
-                                placeholder="Give it a name..."
-                                autoFocus
-                            />
+            <Modal
+                animationType="fade"
+                transparent={true}
+                visible={isAddingEntry}
+                onRequestClose={() => setIsAddingEntry(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.modalTitle}>New Diary Entry</Text>
+                        <TextInput
+                            style={styles.textInput}
+                            value={newTitle}
+                            onChangeText={setNewTitle}
+                            placeholder="Give it a name..."
+                            autoFocus
+                        />
 
-                            <View style={styles.colorPicker}>
-                                {PAPER_COLORS.map(color => (
-                                    <Pressable
-                                        key={color}
-                                        style={[
-                                            styles.colorCircle,
-                                            { backgroundColor: color, borderWidth: selectedColor === color ? 2 : 0 }
-                                        ]}
-                                        onPress={() => setSelectedColor(color)}
-                                    />
-                                ))}
-                            </View>
+                        <View style={styles.colorPicker}>
+                            {PAPER_COLORS.map(color => (
+                                <Pressable
+                                    key={color}
+                                    style={[
+                                        styles.colorCircle,
+                                        { backgroundColor: color, borderWidth: selectedColor === color ? 2 : 0 }
+                                    ]}
+                                    onPress={() => setSelectedColor(color)}
+                                />
+                            ))}
+                        </View>
 
-                            <View style={styles.modalButtons}>
-                                <Pressable style={[styles.modalButton, styles.cancelButton]} onPress={() => setIsAddingEntry(false)}>
-                                    <Text style={styles.buttonText}>Cancel</Text>
-                                </Pressable>
-                                <Pressable style={[styles.modalButton, styles.saveButton]} onPress={handleCreateEntry}>
-                                    <Text style={styles.buttonText}>Create</Text>
-                                </Pressable>
-                            </View>
+                        <View style={styles.modalButtons}>
+                            <Pressable style={[styles.modalButton, styles.cancelButton]} onPress={() => setIsAddingEntry(false)}>
+                                <Text style={styles.buttonText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable style={[styles.modalButton, styles.saveButton]} onPress={handleCreateEntry}>
+                                <Text style={styles.buttonText}>Create</Text>
+                            </Pressable>
                         </View>
                     </View>
-                </Modal>
-            </View>
-        </GestureHandlerRootView>
+                </View>
+            </Modal>
+        </View>
     );
 }
 
@@ -235,6 +252,7 @@ const DiaryCard = ({ item, index, total, expandAmount, isDeleting, onPress, onLo
         </Animated.View>
     );
 };
+
 
 const styles = StyleSheet.create({
     container: {

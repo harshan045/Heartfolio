@@ -20,6 +20,7 @@ import Animated, {
     useAnimatedStyle,
     useSharedValue
 } from "react-native-reanimated";
+import { auth } from "../../firebaseConfig";
 import {
     deleteTodo,
     getTodos,
@@ -38,6 +39,14 @@ export default function TodoScreen() {
     const [selectedColor, setSelectedColor] = useState(PAPER_COLORS[0]);
 
     const loadTodos = async () => {
+        const uid = auth.currentUser?.uid;
+        if (!uid) {
+            console.log('[TODO] No UID, resetting state');
+            setTodos([]);
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         const storedTodos = await getTodos();
         setTodos(storedTodos);
@@ -47,7 +56,7 @@ export default function TodoScreen() {
     useFocusEffect(
         useCallback(() => {
             loadTodos();
-        }, [])
+        }, [auth.currentUser?.uid])
     );
 
     const handleAddTodo = async () => {

@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet as RNStyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -42,7 +43,11 @@ export default function RootLayout() {
     const unsubscribe = onAuthStateChanged(
       auth,
       (currentUser) => {
-        console.log('Auth state changed:', currentUser ? 'User logged in' : 'No user');
+        if (currentUser) {
+          console.log(`Auth state changed: USER_LOGGED_IN | UID: ${currentUser.uid} | Email: ${currentUser.email}`);
+        } else {
+          console.log('Auth state changed: NO_USER');
+        }
         clearTimeout(timeout);
         setUser(currentUser);
         setAuthLoading(false);
@@ -79,8 +84,10 @@ export default function RootLayout() {
   if (!user) {
     return (
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <AuthScreen />
-        <StatusBar style="auto" />
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <AuthScreen />
+          <StatusBar style="auto" />
+        </GestureHandlerRootView>
       </ThemeProvider>
     );
   }
@@ -88,13 +95,15 @@ export default function RootLayout() {
   // If user is logged in, show your existing app navigation
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="diary-page" options={{ headerShown: false, title: 'Diary Page' }} />
-        <Stack.Screen name="polaroid" options={{ headerShown: false, title: 'Polaroid' }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="diary-page" options={{ headerShown: false, title: 'Diary Page' }} />
+          <Stack.Screen name="polaroid" options={{ headerShown: false, title: 'Polaroid' }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        </Stack>
+        <StatusBar style="auto" />
+      </GestureHandlerRootView>
     </ThemeProvider>
   );
 }

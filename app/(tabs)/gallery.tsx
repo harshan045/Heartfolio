@@ -26,6 +26,7 @@ import Animated, {
 import HeartIcon from "../../components/HeartIcon";
 import Magnet from "../../components/Magnet";
 import PaperBitComponent from "../../components/PaperBit";
+import { auth } from "../../firebaseConfig";
 import {
   deleteMemory,
   deletePaperBit,
@@ -61,6 +62,15 @@ export default function PolaroidGallery() {
   const [editingAlbumName, setEditingAlbumName] = useState("");
 
   const loadMemories = async (isInitial = false) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      console.log('[GALLERY] No UID, resetting state');
+      setPolaroids([]);
+      setPaperBits([]);
+      if (isInitial) setLoading(false);
+      return;
+    }
+
     if (isInitial) setLoading(true);
     const storedMemories = await getMemories();
     const storedBits = await getPaperBits();
@@ -72,7 +82,7 @@ export default function PolaroidGallery() {
   useFocusEffect(
     useCallback(() => {
       loadMemories(true);
-    }, [])
+    }, [auth.currentUser?.uid])
   );
 
   const handleDelete = (memory: Polaroid) => {
