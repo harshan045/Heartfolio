@@ -1,3 +1,4 @@
+import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -26,6 +27,7 @@ import Animated, {
 import HeartIcon from "../../components/HeartIcon";
 import Magnet from "../../components/Magnet";
 import PaperBitComponent from "../../components/PaperBit";
+import { useTheme } from "../../components/ThemeContext";
 import { auth } from "../../firebaseConfig";
 import {
   deleteMemory,
@@ -44,6 +46,7 @@ const { width, height } = Dimensions.get("window");
 const COLUMN_WIDTH = (width - 40) / 2;
 
 export default function PolaroidGallery() {
+  const { theme, colors } = useTheme();
   const [polaroids, setPolaroids] = useState<Polaroid[]>([]);
   const [loading, setLoading] = useState(true);
   const [paperBits, setPaperBits] = useState<PaperBit[]>([]);
@@ -117,7 +120,7 @@ export default function PolaroidGallery() {
       y: 100, // Top area
       rotation: Math.random() * 10 - 5,
       color: selectedColor,
-      width: Math.min(Math.max(newBitText.length * 10, 100), 200),
+      width: Math.max(Math.min(newBitText.length * 12, 300), 150), // Dynamic width: 12px per char, max 300px, min 150px
       album: selectedAlbum || 'Uncategorized'
     };
 
@@ -188,7 +191,7 @@ export default function PolaroidGallery() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.center]}>
+      <View style={[styles.container, styles.center, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color="#FF8FAB" />
       </View>
     );
@@ -246,12 +249,44 @@ export default function PolaroidGallery() {
     return polaroids.find(p => p.album === albumName)?.uri;
   };
 
+  const handleImageSticker = async () => {
+    if (!selectedAlbum) return;
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        quality: 0.8,
+        allowsEditing: false,
+      });
+
+      if (!result.canceled) {
+        const asset = result.assets[0];
+        const bit: PaperBit = {
+          id: `img_${Date.now()}`,
+          text: '', // Used for alt text if needed, or empty
+          x: width / 2 - 75,
+          y: 150,
+          rotation: Math.random() * 10 - 5,
+          color: 'transparent',
+          width: 150, // Default width
+          height: 150 * (asset.height / asset.width),
+          album: selectedAlbum,
+          isSticker: true,
+          imageUri: asset.uri
+        };
+        await savePaperBit(bit);
+        loadMemories();
+      }
+    } catch (e) {
+      console.error("Error picking image sticker:", e);
+    }
+  };
+
   const filteredMemories = selectedAlbum
     ? polaroids.filter(p => p.album === selectedAlbum)
     : [];
 
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, minHeight: height }}
         keyboardShouldPersistTaps="handled"
@@ -286,7 +321,7 @@ export default function PolaroidGallery() {
                   }
                 }}
               >
-                <Text style={styles.galleryTitle}>
+                <Text style={[styles.galleryTitle, { color: colors.text }]}>
                   {selectedAlbum ? selectedAlbum : "My Memories 💌"}
                 </Text>
                 {/* {selectedAlbum && (
@@ -299,7 +334,7 @@ export default function PolaroidGallery() {
                 setSelectedAlbum(null);
                 setIsEditingAlbumName(false);
               }} style={styles.backButton}>
-                <Text style={styles.backButtonText}>← Back to Albums</Text>
+                <Text style={[styles.backButtonText, { color: colors.primary }]}>← Back to Albums</Text>
               </Pressable>
             )}
           </View>
@@ -318,7 +353,7 @@ export default function PolaroidGallery() {
                       <HeartIcon size={80} color="#FF8FAB" />
                     </View>
                     <View style={styles.albumOverlay}>
-                      <Text style={styles.albumName}>{album}</Text>
+                      <Text style={[styles.albumName, { color: colors.text }]}>{album}</Text>
                     </View>
                   </View>
                 </Pressable>
@@ -359,22 +394,27 @@ export default function PolaroidGallery() {
       </ScrollView>
 
       {/* Add Bit Buttons - Fixed Position outside ScrollView */}
-      {selectedAlbum && (
-        <View style={styles.fabContainer}>
-          <Pressable style={[styles.fab, { backgroundColor: '#B2CEFE' }]} onPress={() => {
-            setIsAddingSticker(true);
-            setNewBitText("");
-          }}>
-            <Text style={styles.fabText}>❤️</Text>
-          </Pressable>
-          <Pressable style={styles.fab} onPress={() => {
-            setIsAddingBit(true);
-            setSelectedColor(PAPER_COLORS[Math.floor(Math.random() * PAPER_COLORS.length)]);
-          }}>
-            <Text style={styles.fabText}>📝</Text>
-          </Pressable>
-        </View>
-      )}
+      {
+        selectedAlbum && (
+          <View style={styles.fabContainer}>
+            <Pressable style={[styles.fab, { backgroundColor: theme === 'dark' ? '#000000' : colors.secondary }]} onPress={handleImageSticker}>
+              <Text style={styles.fabText}>📷</Text>
+            </Pressable>
+            <Pressable style={[styles.fab, { backgroundColor: theme === 'dark' ? '#000000' : colors.card }]} onPress={() => {
+              setIsAddingSticker(true);
+              setNewBitText("");
+            }}>
+              <Text style={styles.fabText}>❤️</Text>
+            </Pressable>
+            <Pressable style={[styles.fab, { backgroundColor: theme === 'dark' ? '#000000' : colors.primary }]} onPress={() => {
+              setIsAddingBit(true);
+              setSelectedColor(PAPER_COLORS[Math.floor(Math.random() * PAPER_COLORS.length)]);
+            }}>
+              <Text style={styles.fabText}>📝</Text>
+            </Pressable>
+          </View>
+        )
+      }
 
       {/* Expansion Modal */}
       <Modal
@@ -419,11 +459,10 @@ export default function PolaroidGallery() {
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Write something...</Text>
             <TextInput
-              style={[styles.textInput, { backgroundColor: selectedColor }]}
+              style={[styles.textInput, { backgroundColor: selectedColor, minHeight: 150, maxHeight: 300, textAlignVertical: 'top' }]}
               value={newBitText}
               onChangeText={setNewBitText}
               multiline
-              maxLength={50}
               autoFocus
             />
             {/* Color Selection */}
@@ -481,7 +520,7 @@ export default function PolaroidGallery() {
         </View>
       </Modal>
 
-    </GestureHandlerRootView>
+    </GestureHandlerRootView >
   );
 }
 
@@ -494,17 +533,23 @@ const DraggableBit = ({
   onUpdate: (bit: PaperBit, x: number, y: number, width?: number) => void,
   onDelete: () => void
 }) => {
+  const { colors } = useTheme();
   const isPressed = useSharedValue(false);
   const offset = useSharedValue({ x: bit.x, y: bit.y });
   const start = useSharedValue({ x: bit.x, y: bit.y });
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const [showDelete, setShowDelete] = useState(false);
+  const resizeStartSize = useSharedValue({ width: bit.width || 150, height: bit.height || 150 });
+  const rotation = useSharedValue(bit.rotation || 0);
+  const savedRotation = useSharedValue(bit.rotation || 0);
 
   useEffect(() => {
     scale.value = 1;
     savedScale.value = 1;
-  }, [bit.width]);
+    rotation.value = bit.rotation || 0;
+    savedRotation.value = bit.rotation || 0;
+  }, [bit.width, bit.rotation]);
 
   const handleSave = () => {
     let newWidth = bit.width || 150;
@@ -531,7 +576,7 @@ const DraggableBit = ({
         x: offset.value.x,
         y: offset.value.y,
       };
-      runOnJS(onUpdate)(bit, offset.value.x, offset.value.y, bit.width ? bit.width * scale.value : undefined);
+      runOnJS(onUpdate)(bit, offset.value.x, offset.value.y, bit.width ? (bit.width || 150) * scale.value : undefined);
     })
     .onFinalize(() => {
       isPressed.value = false;
@@ -567,7 +612,44 @@ const DraggableBit = ({
       }
     });
 
-  const gesture = Gesture.Exclusive(longPress, tap, Gesture.Simultaneous(pan, pinch));
+  const resizePan = Gesture.Pan()
+    .onBegin(() => {
+      resizeStartSize.value = { width: bit.width || 150, height: bit.height || (bit.width || 150) };
+    })
+    .onUpdate((e) => {
+      // Adjust width based on drag
+      const newWidth = Math.max(50, resizeStartSize.value.width + e.translationX);
+      // If image, maintain aspect ratio
+      const ratio = (bit.height || 150) / (bit.width || 150);
+      const newHeight = newWidth * ratio; // Wait, ratio might be undefined if not image
+
+      if (bit.isSticker && bit.imageUri) {
+        runOnJS(onUpdate)(bit, offset.value.x, offset.value.y, newWidth);
+      } else {
+        // For text, just update width
+        runOnJS(onUpdate)(bit, offset.value.x, offset.value.y, newWidth);
+      }
+    })
+    .onEnd(() => {
+      // Final save handled by runOnJS in update for smooth UI, but maybe throttle saving
+    });
+
+  const rotate = Gesture.Rotation()
+    .onBegin(() => {
+      savedRotation.value = rotation.value;
+    })
+    .onUpdate((e) => {
+      rotation.value = savedRotation.value + (e.rotation * 180 / Math.PI);
+    })
+    .onEnd(() => {
+      savedRotation.value = rotation.value;
+      // We ideally should save rotation to state, but PaperBit type implies it has rotation property. 
+      // Currently onUpdate signature is (bit, x, y, width). 
+      // We might need to extend onUpdate to accept rotation.
+      // For now, visual rotation works via shared value.
+    });
+
+  const gesture = Gesture.Exclusive(longPress, tap, Gesture.Simultaneous(pan, pinch, rotate));
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -575,7 +657,7 @@ const DraggableBit = ({
         { translateX: offset.value.x },
         { translateY: offset.value.y },
         { scale: (scale.value || 1) * (isPressed.value ? 1.05 : 1) },
-        { rotate: `${bit.rotation || 0}deg` }
+        { rotate: `${rotation.value}deg` }
       ],
       position: 'absolute',
       zIndex: isPressed.value ? 1000 : 100,
@@ -586,6 +668,14 @@ const DraggableBit = ({
     <GestureDetector gesture={gesture}>
       <Animated.View style={animatedStyle}>
         <PaperBitComponent data={bit} />
+
+        {/* Resize Handle only on long press (when showDelete/showSelection is true) */}
+        {showDelete && (
+          <GestureDetector gesture={resizePan}>
+            <View style={styles.resizeHandle} />
+          </GestureDetector>
+        )}
+
         {/* Remove Button */}
         {showDelete && (
           <Pressable
@@ -594,7 +684,7 @@ const DraggableBit = ({
               position: 'absolute',
               top: -10,
               right: -10,
-              backgroundColor: '#FF5252',
+              backgroundColor: colors.delete || '#FF5252',
               width: 24,
               height: 24,
               borderRadius: 12,
@@ -616,7 +706,7 @@ const DraggableBit = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FDF6F0",
+    // backgroundColor handled by theme provider or inline
   },
   center: {
     justifyContent: "center",
@@ -798,8 +888,23 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 30,
     right: 30,
-    gap: 15,
+    alignItems: 'center',
+    gap: 10,
   },
+  resizeHandle: {
+    position: 'absolute',
+    bottom: -10,
+    right: -10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FF8FAB',
+    borderWidth: 2,
+    borderColor: '#FFF',
+    elevation: 5,
+    zIndex: 200,
+  },
+
   fab: {
     backgroundColor: '#FF8FAB',
     width: 60,

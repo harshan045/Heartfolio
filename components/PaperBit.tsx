@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { PaperBit as PaperBitType } from '../utils/storage';
 
 interface PaperBitProps {
@@ -8,6 +8,16 @@ interface PaperBitProps {
 
 export default function PaperBit({ data }: PaperBitProps) {
     if (data.isSticker) {
+        if (data.imageUri) {
+            return (
+                <View style={{ width: data.width || 100, height: data.height || (data.width || 100), overflow: 'visible' }}>
+                    <Image
+                        source={{ uri: data.imageUri }}
+                        style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
+                    />
+                </View>
+            );
+        }
         return (
             <View style={[{ width: data.width || 100, justifyContent: 'center', alignItems: 'center' }]}>
                 <Text style={{ fontSize: (data.width || 100) / 2 }}>{data.text}</Text>
@@ -21,10 +31,11 @@ export default function PaperBit({ data }: PaperBitProps) {
             {
                 backgroundColor: data.color,
                 width: data.width || 150,
+                minHeight: 60, // Minimum height for small text
             }
         ]}>
             <View style={styles.tape} />
-            <Text style={styles.text}>{data.text}</Text>
+            <Text style={styles.text} numberOfLines={undefined}>{data.text}</Text>
         </View>
     );
 }

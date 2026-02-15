@@ -1,6 +1,5 @@
 import { IndieFlower_400Regular } from "@expo-google-fonts/indie-flower";
 import { PatrickHand_400Regular } from "@expo-google-fonts/patrick-hand";
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from "expo-font";
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -11,7 +10,7 @@ import { ActivityIndicator, StyleSheet as RNStyleSheet, View } from 'react-nativ
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ThemeProvider } from '../components/ThemeContext';
 import { auth } from '../firebaseConfig';
 import AuthScreen from '../screens/AuthScreen';
 
@@ -23,7 +22,6 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [loaded] = useFonts({
     PatrickHand_400Regular,
     IndieFlower_400Regular,
@@ -83,7 +81,7 @@ export default function RootLayout() {
   // If user is not logged in, show AuthScreen
   if (!user) {
     return (
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <ThemeProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <AuthScreen />
           <StatusBar style="auto" />
@@ -94,7 +92,7 @@ export default function RootLayout() {
 
   // If user is logged in, show your existing app navigation
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

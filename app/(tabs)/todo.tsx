@@ -20,6 +20,7 @@ import Animated, {
     useAnimatedStyle,
     useSharedValue
 } from "react-native-reanimated";
+import { useTheme } from "../../components/ThemeContext";
 import { auth } from "../../firebaseConfig";
 import {
     deleteTodo,
@@ -32,6 +33,7 @@ import {
 const { width, height } = Dimensions.get("window");
 
 export default function TodoScreen() {
+    const { theme, colors } = useTheme();
     const [todos, setTodos] = useState<TodoItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [isAddingTodo, setIsAddingTodo] = useState(false);
@@ -107,7 +109,7 @@ export default function TodoScreen() {
     }
 
     return (
-        <GestureHandlerRootView style={styles.container}>
+        <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={styles.board}>
                 <Text style={styles.boardTitle}>Sticky Reminders 📌</Text>
 
@@ -129,8 +131,11 @@ export default function TodoScreen() {
                 )}
             </View>
 
-            <Pressable style={styles.fab} onPress={() => setIsAddingTodo(true)}>
-                <Text style={styles.fabText}>+</Text>
+            <Pressable
+                style={[styles.fab, theme === 'dark' && { backgroundColor: '#000000' }]}
+                onPress={() => setIsAddingTodo(true)}
+            >
+                <Text style={[styles.fabText, theme === 'dark' && { color: '#FFFFFF' }]}>+</Text>
             </Pressable>
 
             <Modal
@@ -288,7 +293,7 @@ const DraggableTodo = ({
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#FDF6F0",
+        // backgroundColor handled by theme provider or inline
     },
     center: {
         justifyContent: "center",

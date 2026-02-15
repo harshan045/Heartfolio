@@ -23,6 +23,7 @@ import Animated, {
     useSharedValue
 } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
+import { useTheme } from "../components/ThemeContext";
 import { auth } from "../firebaseConfig";
 import {
     deleteDiaryElement,
@@ -37,6 +38,7 @@ const { width, height } = Dimensions.get("window");
 const FONTS = ["PatrickHand_400Regular", "IndieFlower_400Regular", "System"];
 
 export default function DiaryPageScreen() {
+    const { theme, colors } = useTheme();
     const { id, title } = useLocalSearchParams<{ id: string, title: string }>();
     const router = useRouter();
     const [elements, setElements] = useState<DiaryElement[]>([]);
@@ -336,7 +338,7 @@ export default function DiaryPageScreen() {
     }
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={styles.ruledBackground}>
                 {Array.from({ length: 50 }).map((_, i) => (
                     <View key={i} style={styles.line} />
@@ -445,31 +447,31 @@ export default function DiaryPageScreen() {
                     <View style={styles.toolbarSeparator} />
 
                     <Pressable
-                        style={[styles.toolButton, { backgroundColor: '#FF8FAB' }]}
+                        style={[styles.toolButton, { backgroundColor: colors.primary }]}
                         onPress={() => setIsDrawMode(false)}
                     >
-                        <IconSymbol name="xmark" size={24} color="#ffffff" />
+                        <IconSymbol name="xmark" size={24} color={theme === 'dark' ? '#FFFFFF' : '#ffffff'} />
                     </Pressable>
                 </View>
             ) : (
                 <View style={styles.fabContainer}>
                     <Pressable
                         onPress={() => setIsDrawMode(!isDrawMode)}
-                        style={[styles.fab, { backgroundColor: '#B2CEFE' }]}
+                        style={[styles.fab, { backgroundColor: theme === 'dark' ? '#000000' : '#B2CEFE' }]}
                     >
-                        <IconSymbol name="hand.draw" size={24} color="#fff" />
+                        <IconSymbol name="hand.draw" size={24} color="#FFFFFF" />
                     </Pressable>
-                    <Pressable style={styles.fab} onPress={() => openAddModal('text')}>
-                        <IconSymbol name="text.justify.left" size={24} color="#fff" />
+                    <Pressable style={[styles.fab, { backgroundColor: theme === 'dark' ? '#000000' : '#FFD1DC' }]} onPress={() => openAddModal('text')}>
+                        <IconSymbol name="text.justify.left" size={24} color="#FFFFFF" />
                     </Pressable>
-                    <Pressable style={[styles.fab, { backgroundColor: '#FFCCF9' }]} onPress={() => openAddModal('sticky')}>
-                        <IconSymbol name="note.text" size={24} color="#fff" />
+                    <Pressable style={[styles.fab, { backgroundColor: theme === 'dark' ? '#000000' : '#FFF9C4' }]} onPress={() => openAddModal('sticky')}>
+                        <IconSymbol name="note.text" size={24} color="#FFFFFF" />
                     </Pressable>
-                    <Pressable style={[styles.fab, { backgroundColor: '#C1E1C1' }]} onPress={() => openAddModal('sticker')}>
-                        <IconSymbol name="face.smiling" size={24} color="#fff" />
+                    <Pressable style={[styles.fab, { backgroundColor: theme === 'dark' ? '#000000' : '#C8E6C9' }]} onPress={() => openAddModal('sticker')}>
+                        <IconSymbol name="face.smiling" size={24} color="#FFFFFF" />
                     </Pressable>
-                    <Pressable style={[styles.fab, { backgroundColor: '#FFB7B2' }]} onPress={addImage}>
-                        <IconSymbol name="photo.on.rectangle" size={24} color="#fff" />
+                    <Pressable style={[styles.fab, { backgroundColor: theme === 'dark' ? '#000000' : '#D1C4E9' }]} onPress={addImage}>
+                        <IconSymbol name="photo.on.rectangle" size={24} color="#FFFFFF" />
                     </Pressable>
                 </View>
             )}
@@ -495,6 +497,8 @@ export default function DiaryPageScreen() {
                             onChangeText={setNewText}
                             placeholder={modalMode === 'sticker' ? "😊" : "Type here..."}
                             multiline={modalMode !== 'sticker'}
+                            onContentSizeChange={() => { }} // Force update/re-layout if needed
+                            scrollEnabled={false} // Allow expanding
                             autoFocus
                         />
 
@@ -645,17 +649,27 @@ const DraggableElement = ({
         }), [element, onUpdate, disabled]);
 
     const resizePan = React.useMemo(() => Gesture.Pan()
-        .enabled(!disabled && element.type === 'image')
+        .enabled(!disabled)
         .onBegin(() => {
             isPressed.value = true;
             startSize.value = { width: width.value, height: height.value };
         })
         .onUpdate((e) => {
-            // Resize preserving aspect ratio
-            const ratio = startSize.value.width / startSize.value.height;
-            const newWidth = Math.max(50, startSize.value.width + e.translationX);
-            width.value = newWidth;
-            height.value = newWidth / ratio;
+            if (element.type === 'image' || element.type === 'sticker') {
+                // Resize preserving aspect ratio
+                const ratio = startSize.value.width / startSize.value.height;
+                const newWidth = Math.max(50, startSize.value.width + e.translationX);
+                width.value = newWidth;
+                height.value = newWidth / ratio;
+            } else {
+                // For text/sticky, only resize width. 
+                // We DON'T set height.value here so the shared value remains what it was? 
+                // Or we update width and let layout happen.
+                // The Animated.View uses `height: height.value` conditionally now.
+                const newWidth = Math.max(100, startSize.value.width + e.translationX);
+                width.value = newWidth;
+                // We do NOT update height.value for text, allowing it to be undefined/auto if we changed the style prop logic
+            }
         })
         .onEnd(() => {
             runOnJS(onUpdate)(element, { width: width.value, height: height.value });
@@ -697,7 +711,14 @@ const DraggableElement = ({
             position: 'absolute',
             zIndex: isPressed.value ? 1000 : (element.zIndex || 1),
             width: width.value,
-            height: height.value,
+            // Only force height for images/stickers, let text flow naturally (or use minHeight)
+            // But we need to support specific height if resizing vertically too?
+            // For now, simpler: for images use fixed aspect ratio height.
+            // For text, let's use 'undefined' for height so it wraps?
+            // Reanimated styles need explicit values often.
+            // Let's try to conditionally set height.
+            height: (element.type === 'image' || element.type === 'sticker') ? height.value : undefined,
+            minHeight: (element.type === 'text' || element.type === 'sticky') ? 100 : undefined,
         };
     });
 
@@ -778,6 +799,25 @@ const DraggableElement = ({
                 </View>
             </GestureDetector>
 
+            {/* Resize Handle - Show when "Deleting" (Long Pressed) state is active */}
+            {isDeleting && (
+                <GestureDetector gesture={resizePan}>
+                    <View style={{
+                        position: 'absolute',
+                        bottom: -10,
+                        right: -10,
+                        width: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        backgroundColor: '#FF8FAB',
+                        borderWidth: 2,
+                        borderColor: '#FFF',
+                        elevation: 5,
+                        zIndex: 2000,
+                    }} />
+                </GestureDetector>
+            )}
+
             {/* Image Context Menu - Moved outside GestureDetector but inside Animated.View */}
             {showImageMenu && element.type === 'image' && (
                 <Animated.View style={[styles.imageMenuContainer, controlStyle]}>
@@ -834,7 +874,7 @@ const DraggableElement = ({
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#FDF6F0",
+        backgroundColor: "transparent", // Use transparent so ThemeProvider background (if set) or ruled lines show
     },
     ruledBackground: {
         ...StyleSheet.absoluteFillObject,
@@ -889,8 +929,9 @@ const styles = StyleSheet.create({
         borderRadius: 2,
     },
     textContainer: {
-        padding: 15,
-        maxWidth: 250,
+        padding: 5,
+        width: '100%',
+        height: '100%',
     },
     diaryText: {
         fontSize: 22,
@@ -944,10 +985,10 @@ const styles = StyleSheet.create({
         width: 60,
         height: 60,
         borderRadius: 30,
-        backgroundColor: '#FF8FAB',
         justifyContent: 'center',
         alignItems: 'center',
         elevation: 5,
+        backgroundColor: '#FF8FAB', // Default, will override inline
     },
     fabText: {
         color: '#fff',

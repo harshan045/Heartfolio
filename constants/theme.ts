@@ -10,20 +10,30 @@ const tintColorDark = '#fff';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
+    text: '#1E293B',
+    background: '#FDF6F0',
+    card: '#FFFFFF',
+    primary: '#FFB7CE', // Pink
+    secondary: '#F1F5F9', // Light gray/input background
+    tint: '#FFB7CE',
     icon: '#687076',
     tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    tabIconSelected: '#FFB7CE',
+    shadow: '#000',
+    delete: '#EF4444',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    text: '#1E293B', // Dark text for readability on light background
+    background: '#FDF6F0', // Pure white for Gallery/Todo/Diary in dark mode
+    card: '#FFFFFF', // White cards
+    primary: '#000000', // Black for buttons/accents
+    secondary: '#E2E8F0',
+    tint: '#000000',
+    icon: '#687076',
+    tabIconDefault: '#687076',
+    tabIconSelected: '#000000',
+    shadow: '#000',
+    delete: '#EF4444',
   },
 };
 

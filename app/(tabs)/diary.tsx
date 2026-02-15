@@ -16,6 +16,7 @@ import Animated, {
     useSharedValue,
     withSpring
 } from "react-native-reanimated";
+import { useTheme } from "../../components/ThemeContext";
 import { auth } from "../../firebaseConfig";
 import {
     deleteDiaryEntry,
@@ -26,6 +27,7 @@ import {
 } from "../../utils/storage";
 
 export default function DiaryListView() {
+    const { theme, colors } = useTheme();
     const router = useRouter();
     const [entries, setEntries] = useState<DiaryEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -119,7 +121,7 @@ export default function DiaryListView() {
     }
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
             <Pressable
                 style={StyleSheet.absoluteFill}
                 onPress={() => setDeletingId(null)}
@@ -163,8 +165,8 @@ export default function DiaryListView() {
                 />
             </GestureDetector>
 
-            <Pressable style={styles.fab} onPress={() => setIsAddingEntry(true)}>
-                <Text style={styles.fabText}>+</Text>
+            <Pressable style={[styles.fab, theme === 'dark' && { backgroundColor: '#000000' }]} onPress={() => setIsAddingEntry(true)}>
+                <Text style={[styles.fabText, theme === 'dark' && { color: '#FFFFFF' }]}>+</Text>
             </Pressable>
 
             <Modal
@@ -174,7 +176,7 @@ export default function DiaryListView() {
                 onRequestClose={() => setIsAddingEntry(false)}
             >
                 <View style={styles.modalOverlay}>
-                    <View style={styles.inputContainer}>
+                    <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
                         <Text style={styles.modalTitle}>New Diary Entry</Text>
                         <TextInput
                             style={styles.textInput}

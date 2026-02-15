@@ -23,6 +23,12 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
+    "updates": {
+      "url": "https://u.expo.dev/d8bb839f-5b05-4a24-8a32-9339cb6c9dce"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"

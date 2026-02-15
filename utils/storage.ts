@@ -21,6 +21,7 @@ export type PaperBit = {
   height?: number;
   album: string;
   isSticker?: boolean;
+  imageUri?: string;
 };
 
 export type TodoItem = {
@@ -147,7 +148,7 @@ export const clearUserWorkspace = async (): Promise<void> => {
 export const saveMemory = async (newMemory: Polaroid): Promise<void> => {
   try {
     const existingMemories = await getMemories();
-    const updatedMemories = [newMemory, ...existingMemories];
+    const updatedMemories = [...existingMemories, newMemory];
     await AsyncStorage.setItem(getScopedKey(STORAGE_KEY), JSON.stringify(updatedMemories));
   } catch (error) {
     console.error('Error saving memory:', error);

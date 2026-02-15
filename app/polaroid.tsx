@@ -4,6 +4,7 @@ import React, { useRef, useState } from "react";
 import { Alert, Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { GestureHandlerRootView, PanGestureHandler, State } from "react-native-gesture-handler";
 import Magnet from "../components/Magnet";
+import { useTheme } from "../components/ThemeContext";
 import {
   getAlbums,
   MAGNET_COLORS,
@@ -14,6 +15,7 @@ import {
 } from "../utils/storage";
 
 export default function PolaroidScreen() {
+  const { theme, colors } = useTheme();
   const router = useRouter();
   const [image, setImage] = useState<string | null>(null);
   const [memory, setMemory] = useState("");
@@ -172,15 +174,15 @@ export default function PolaroidScreen() {
   };
 
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {!image ? (
           <View style={styles.actionButtons}>
-            <Pressable style={styles.button} onPress={pickImage}>
+            <Pressable style={[styles.button, { backgroundColor: theme === 'dark' ? '#000000' : '#FF8FAB' }]} onPress={pickImage}>
               <Text style={styles.buttonText}>Pick from Gallery</Text>
             </Pressable>
 
-            <Pressable style={styles.button} onPress={takePhoto}>
+            <Pressable style={[styles.button, { backgroundColor: theme === 'dark' ? '#000000' : '#FF8FAB' }]} onPress={takePhoto}>
               <Text style={styles.buttonText}>Take Photo</Text>
             </Pressable>
           </View>
@@ -262,7 +264,7 @@ export default function PolaroidScreen() {
         onRequestClose={() => setIsSelectingAlbum(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.albumSelectorModal}>
+          <View style={[styles.albumSelectorModal, { backgroundColor: colors.card }]}>
             <Text style={styles.modalTitle}>Save to Album</Text>
 
             <ScrollView style={styles.albumList} contentContainerStyle={{ gap: 10 }}>

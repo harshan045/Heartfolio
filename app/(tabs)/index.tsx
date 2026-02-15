@@ -31,6 +31,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { useTheme } from "../../components/ThemeContext";
 import { auth } from "../../firebaseConfig";
 import { clearUserWorkspace, getScopedKey, getStorageData } from "../../utils/storage";
 
@@ -346,10 +347,11 @@ export default function HomeScreen() {
   const [isCircle, setIsCircle] = useState(false);
   const [menuStickerId, setMenuStickerId] = useState<string | null>(null);
 
-  // New States for UI Refinements
   const [showSelection, setShowSelection] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [addMode, setAddMode] = useState<'text' | 'sticker'>('text');
+
+  const { theme, colors, toggleTheme } = useTheme();
 
   const pop = useSharedValue(0);
   const flow = useSharedValue(0);
@@ -368,7 +370,10 @@ export default function HomeScreen() {
       setBio("Welcome to my Heartfolio! 🌸");
       setBanner("https://images.unsplash.com/photo-1542332213-31f87348057f?q=80&w=2670&auto=format&fit=crop");
       setStickers([]);
-      setDecoPos({});
+      setDecoPos({
+        cat: { x: -40, y: 160, scale: 1, rotation: 0 },
+        heart: { x: 100, y: 130, scale: 1, rotation: 0 }
+      });
       return;
     }
 
@@ -443,7 +448,7 @@ export default function HomeScreen() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={[styles.safe, { backgroundColor: theme === 'dark' ? '#000000' : colors.background }]}>
         <Pressable
           style={styles.flex}
           onPressIn={() => { setIsMouth(true); scale.value = withSpring(0.97); pop.value = withSpring(1); }}
@@ -452,18 +457,26 @@ export default function HomeScreen() {
           <View style={styles.center}>
             <Animated.View style={[styles.cluster, { transform: [{ scale: scale.value }] }]}>
 
-              <View style={styles.card}>
+              <View style={[styles.card, { backgroundColor: colors.card }]}>
                 <View style={[styles.tape, styles.tl]} /><View style={[styles.tape, styles.tr]} />
                 <View style={styles.bc}>
                   <Image source={{ uri: banner }} style={styles.bi} />
                   <Pressable style={styles.eb} onPress={pickBanner}><Ionicons name="camera" size={16} color="#FFF" /></Pressable>
                   <Pressable style={styles.sb} onPress={() => setIsSettings(true)}><Ionicons name="settings-outline" size={24} color="#FFF" /></Pressable>
+                  <Pressable style={[styles.sb, { right: undefined, left: 12 }]} onPress={toggleTheme}>
+                    <Ionicons name={theme === 'dark' ? "moon" : "sunny"} size={24} color="#FFF" />
+                  </Pressable>
                 </View>
                 <View style={styles.content}>
-                  <Text style={styles.un}>{name}</Text>
+                  <Text style={[styles.un, { color: colors.text }]}>{name}</Text>
                   <Text style={styles.bio}>{bio}</Text>
                   <View style={styles.row}>
-                    <Pressable style={styles.ab} onPress={() => router.push("/polaroid")}><Text style={styles.at}>Add Memory ✨</Text></Pressable>
+                    <Pressable
+                      style={[styles.ab, theme === 'dark' && { backgroundColor: '#000000' }]}
+                      onPress={() => router.push("/polaroid")}
+                    >
+                      <Text style={styles.at}>Add Memory ✨</Text>
+                    </Pressable>
                   </View>
                 </View>
               </View>
@@ -490,17 +503,17 @@ export default function HomeScreen() {
         {/* Floating Add Plus Button */}
         {/* Floating Add Plus Button - Moved to Left */}
         <Pressable
-          style={styles.floatingAdd}
+          style={[styles.floatingAdd, theme === 'dark' && { backgroundColor: '#555555ff' }]}
           onPress={() => setShowSelection(true)}
         >
-          <Ionicons name="add" size={32} color="#FFF" />
+          <Ionicons name="add" size={32} color="#FFFFFF" />
         </Pressable>
 
         {/* Selection Modal: Text or Sticker */}
         <Modal visible={showSelection} transparent animationType="fade">
           <Pressable style={styles.ovl} onPress={() => setShowSelection(false)}>
-            <View style={styles.box}>
-              <Text style={styles.title}>Add to Scrapbook ✨</Text>
+            <View style={[styles.box, { backgroundColor: colors.card }]}>
+              <Text style={[styles.title, { color: colors.text }]}>Add to Scrapbook ✨</Text>
               <View style={styles.btns}>
                 <Pressable style={[styles.btn, styles.sve]} onPress={() => {
                   setShowSelection(false);
@@ -543,15 +556,16 @@ export default function HomeScreen() {
         </Modal>
 
         <Modal visible={isStk} transparent animationType="slide">
-          <View style={styles.ovl}><View style={styles.box}>
-            <Text style={styles.title}>
+          <View style={styles.ovl}><View style={[styles.box, { backgroundColor: colors.card }]}>
+            <Text style={[styles.title, { color: colors.text }]}>
               {stkId ? "Edit Item" : (addMode === 'sticker' ? "New Sticker" : "New Note")}
             </Text>
             <TextInput
-              style={[styles.input, addMode === 'sticker' && { fontSize: 40, textAlign: 'center' }]}
+              style={[styles.input, { backgroundColor: colors.secondary, color: colors.text }, addMode === 'sticker' && { fontSize: 40, textAlign: 'center' }]}
               value={stkText}
               onChangeText={setStkText}
               placeholder={addMode === 'sticker' ? "Emojis here..." : "What's on your mind?"}
+              placeholderTextColor={colors.icon}
               autoFocus
             />
 
@@ -577,9 +591,9 @@ export default function HomeScreen() {
 
         <Modal visible={isSettings} transparent animationType="fade">
           <Pressable style={styles.flex} onPress={() => setIsSettings(false)}>
-            <View style={styles.menu}>
-              <Pressable style={styles.mi} onPress={() => { setIsSettings(false); setIsEdit(true); setTempNick(name); setTempBio(bio); }}><Text>Edit Profile</Text></Pressable>
-              <Pressable style={styles.mi} onPress={() => { setIsSettings(false); setShowHelp(true); }}><Text>Help</Text></Pressable>
+            <View style={[styles.menu, { backgroundColor: colors.card }]}>
+              <Pressable style={styles.mi} onPress={() => { setIsSettings(false); setIsEdit(true); setTempNick(name); setTempBio(bio); }}><Text style={{ color: colors.text }}>Edit Profile</Text></Pressable>
+              <Pressable style={styles.mi} onPress={() => { setIsSettings(false); setShowHelp(true); }}><Text style={{ color: colors.text }}>Help</Text></Pressable>
               <Pressable style={styles.mi} onPress={() => {
                 setIsSettings(false);
                 Alert.alert(
@@ -603,12 +617,12 @@ export default function HomeScreen() {
         </Modal>
 
         <Modal visible={isEdit} transparent animationType="slide">
-          <View style={styles.ovl}><View style={styles.box}>
-            <Text style={styles.title}>Edit Profile</Text>
+          <View style={styles.ovl}><View style={[styles.box, { backgroundColor: colors.card }]}>
+            <Text style={[styles.title, { color: colors.text }]}>Edit Profile</Text>
             <Text style={styles.label}>Nickname</Text>
-            <TextInput style={styles.input} value={tempNick} onChangeText={setTempNick} />
+            <TextInput style={[styles.input, { backgroundColor: colors.secondary, color: colors.text }]} value={tempNick} onChangeText={setTempNick} />
             <Text style={styles.label}>Bio</Text>
-            <TextInput style={styles.input} value={tempBio} onChangeText={setTempBio} multiline />
+            <TextInput style={[styles.input, { backgroundColor: colors.secondary, color: colors.text }]} value={tempBio} onChangeText={setTempBio} multiline />
             <View style={styles.btns}>
               <Pressable style={[styles.btn, styles.can]} onPress={() => setIsEdit(false)}><Text>Cancel</Text></Pressable>
               <Pressable style={[styles.btn, styles.sve]} onPress={() => {
@@ -625,8 +639,8 @@ export default function HomeScreen() {
         {/* Sticker Menu Modal */}
         <Modal visible={!!menuStickerId} transparent animationType="fade">
           <Pressable style={styles.ovl} onPress={() => setMenuStickerId(null)}>
-            <View style={styles.box}>
-              <Text style={styles.title}>Sticker Options ✨</Text>
+            <View style={[styles.box, { backgroundColor: colors.card }]}>
+              <Text style={[styles.title, { color: colors.text }]}>Sticker Options ✨</Text>
 
               <Pressable onPress={() => {
                 const item = stickers.find(s => s.id === menuStickerId);
@@ -676,11 +690,11 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#FDF6F0" },
+  safe: { flex: 1 }, // Background handled by theme provider
   flex: { flex: 1 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   cluster: { width: "85%", maxWidth: 400, alignItems: "center", justifyContent: "center" },
-  card: { width: "100%", backgroundColor: "#FFF", borderRadius: 24, padding: 12, elevation: 10, zIndex: 10 },
+  card: { width: "100%", borderRadius: 24, padding: 12, elevation: 10, zIndex: 10 }, // backgroundColor applied inline with theme
   bc: { height: 180, borderRadius: 16, overflow: "hidden" },
   bi: { width: "100%", height: "100%" },
   eb: { position: "absolute", bottom: 12, right: 12, backgroundColor: "rgba(0,0,0,0.3)", padding: 8, borderRadius: 20 },
