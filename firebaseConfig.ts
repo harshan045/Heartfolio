@@ -13,7 +13,7 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
   measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
-
+console.log("Firebase Config:", firebaseConfig);
 const app = initializeApp(firebaseConfig);
 export const auth = FirebaseAuth.initializeAuth(app, {
   persistence: (FirebaseAuth as any).getReactNativePersistence(AsyncStorage),

@@ -54,15 +54,14 @@ useEffect(() => {
       SplashScreen.hideAsync();
     }
   }, [loaded, authLoading]);
-
-  if (!loaded || authLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ff6b9d" />
-      </View>
-    );
-  }
-
+ 
+ if (!loaded || authLoading) {
+  return (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color="#ff6b9d" />
+    </View>
+  );
+}
   // If user is not logged in, show AuthScreen
   if (!user) {
     return (
