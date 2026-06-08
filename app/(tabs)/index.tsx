@@ -390,7 +390,9 @@ export default function HomeScreen() {
   const router = useRouter();
   const [name, setName] = useState("Hello");
   const [bio, setBio] = useState("Capturing life's little moments 🌸");
-  const [banner, setBanner] = useState("default_profile.jpeg");
+const DEFAULT_BANNER = require("../../assets/images/default_profile.jpeg");
+
+const [banner, setBanner] = useState<string | null>(null);
   const [stickers, setStickers] = useState<StickerData[]>([]);
   const [decoPos, setDecoPos] = useState({
     cat: { x: -120, y: 50, scale: 1, rotation: 0 },
@@ -442,9 +444,7 @@ export default function HomeScreen() {
       console.log("[HOME] No UID, resetting to defaults");
       setName("Sweetie");
       setBio("Welcome to my Heartfolio! 🌸");
-      setBanner(
-        "https://images.unsplash.com/photo-1542332213-31f87348057f?q=80&w=2670&auto=format&fit=crop",
-      );
+      setBanner(null);
       setStickers([]);
       setDecoPos({
         cat: { x: -120, y: 50, scale: 1, rotation: 0 },
@@ -465,7 +465,7 @@ export default function HomeScreen() {
 
       if (n) setName(n);
       if (bi) setBio(bi);
-      if (b) setBanner(b);
+      setBanner(b || null);
       if (s) setStickers(JSON.parse(s));
       if (d) setDecoPos(JSON.parse(d));
     } catch (e) {
@@ -539,7 +539,9 @@ export default function HomeScreen() {
       AsyncStorage.setItem(getScopedKey("userBanner"), res.assets[0].uri);
     }
   };
-
+  const clusterStyle = useAnimatedStyle(() => ({
+              transform: [{ scale: scale.value }],
+            }));
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView
@@ -552,7 +554,7 @@ export default function HomeScreen() {
           style={styles.flex}
           onPressIn={() => {
             setIsMouth(true);
-            scale.value = withSpring(0.97);
+            scale.value = withSpring(1.05);
             pop.value = withSpring(1);
           }}
           onPressOut={() => {
@@ -562,14 +564,18 @@ export default function HomeScreen() {
           }}
         >
           <View style={styles.center}>
+      
             <Animated.View
-              style={[styles.cluster, { transform: [{ scale: scale.value }] }]}
+              style={[styles.cluster, clusterStyle]}
             >
               <View style={[styles.card, { backgroundColor: colors.card }]}>
                 <View style={[styles.tape, styles.tl]} />
                 <View style={[styles.tape, styles.tr]} />
                 <View style={styles.bc}>
-                  <Image source={{ uri: banner }} style={styles.bi} />
+                 <Image
+                  source={banner ? { uri: banner } : DEFAULT_BANNER}
+                  style={styles.bi}
+                  />
                   <Pressable style={styles.eb} onPress={pickBanner}>
                     <Ionicons name="camera" size={16} color="#FFF" />
                   </Pressable>
@@ -895,19 +901,24 @@ export default function HomeScreen() {
               </Text>
 
               <Pressable
-                onPress={() => {
-                  const item = stickers.find((s) => s.id === menuStickerId);
-                  if (item) {
-                    setStkId(item.id);
-                    setStkText(item.text);
-                    setStkColor(item.color);
-                    setIsCircle(!!item.isCircle);
-                    setAddMode(item.type || "text");
-                    setIsStk(true);
-                  }
-                  setMenuStickerId(null);
-                }}
-              ></Pressable>
+  style={[styles.btn, styles.sve]}
+  onPress={() => {
+    const item = stickers.find((s) => s.id === menuStickerId);
+    if (item) {
+      setStkId(item.id);
+      setStkText(item.text);
+      setStkColor(item.color);
+      setIsCircle(!!item.isCircle);
+      setAddMode(item.type || "text");
+      setIsStk(true);
+    }
+    setMenuStickerId(null);
+  }}
+>
+  <Text style={{ color: "#FFF", fontWeight: "900" }}>
+    ✏️ Edit
+  </Text>
+</Pressable>
 
               <Text style={styles.label}>Resize:</Text>
               <View style={[styles.btns, { marginBottom: 15 }]}>
@@ -929,9 +940,10 @@ export default function HomeScreen() {
                   onPress={() => {
                     if (menuStickerId)
                       updateS(menuStickerId, {
-                        scale:
-                          (stickers.find((s) => s.id === menuStickerId)
-                            ?.scale || 1) + 0.2,
+                       scale: Math.max(
+                       0.5,
+                     (stickers.find((s) => s.id === menuStickerId)?.scale || 1) - 0.2
+      ),
                       });
                   }}
                 >
@@ -979,12 +991,12 @@ const styles = StyleSheet.create({
   },
   card: {
     width: "100%",
-    borderRadius: 24,
+    borderRadius: 32,
     padding: 12,
     elevation: 10,
     zIndex: 10,
   }, // backgroundColor applied inline with theme
-  bc: { height: 180, borderRadius: 16, overflow: "hidden" },
+  bc: { height: 180, borderRadius: 24, overflow: "hidden" },
   bi: { width: "100%", height: "100%" },
   eb: {
     position: "absolute",

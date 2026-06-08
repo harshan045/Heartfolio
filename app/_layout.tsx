@@ -2,7 +2,7 @@ import { IndieFlower_400Regular } from "@expo-google-fonts/indie-flower";
 import { PatrickHand_400Regular } from "@expo-google-fonts/patrick-hand";
 import { useFonts } from "expo-font";
 import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
+// import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
@@ -15,12 +15,11 @@ import { auth } from '../firebaseConfig';
 import AuthScreen from '../screens/AuthScreen';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+// SplashScreen.preventAutoHideAsync();
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  initialRouteName: '(tabs)',
 };
-
 export default function RootLayout() {
   const [loaded] = useFonts({
     PatrickHand_400Regular,
@@ -30,65 +29,109 @@ export default function RootLayout() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-useEffect(() => {
-  const unsubscribe = onAuthStateChanged(
-    auth,
-    (currentUser) => {
-      console.log("AUTH CALLBACK FIRED");
-      console.log("USER:", currentUser?.email);
-
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setAuthLoading(false);
-    },
-    (error) => {
-      console.error("AUTH ERROR:", error);
-      setAuthLoading(false);
-    }
-  );
+    });
 
-  return unsubscribe;
-}, []);
+    return unsubscribe;
+  }, []);
 
-  useEffect(() => {
-    if (loaded && !authLoading) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded, authLoading]);
- 
- if (!loaded || authLoading) {
-  return (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#ff6b9d" />
-    </View>
-  );
-}
-  // If user is not logged in, show AuthScreen
-  if (!user) {
+  if (!loaded || authLoading) {
     return (
-      <ThemeProvider>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <AuthScreen />
-          <StatusBar style="auto" />
-        </GestureHandlerRootView>
-      </ThemeProvider>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#ff6b9d" />
+      </View>
     );
   }
 
-  // If user is logged in, show your existing app navigation
   return (
     <ThemeProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="diary-page" options={{ headerShown: false, title: 'Diary Page' }} />
-          <Stack.Screen name="polaroid" options={{ headerShown: false, title: 'Polaroid' }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        </Stack>
+        {user ? (
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="diary-page" options={{ presentation: 'card' }} />
+            <Stack.Screen name="polaroid" options={{ presentation: 'card' }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+          </Stack>
+        ) : (
+          <AuthScreen />
+        )}
         <StatusBar style="auto" />
       </GestureHandlerRootView>
     </ThemeProvider>
   );
 }
+// export default function RootLayout() {
+//   const [loaded] = useFonts({
+//     PatrickHand_400Regular,
+//     IndieFlower_400Regular,
+//   });
+
+//   const [user, setUser] = useState<User | null>(null);
+//   const [authLoading, setAuthLoading] = useState(false);
+
+// useEffect(() => {
+//   const unsubscribe = onAuthStateChanged(
+//     auth,
+//     (currentUser) => {
+//       console.log("AUTH CALLBACK FIRED");
+//       console.log("USER:", currentUser?.email);
+
+//       setUser(currentUser);
+//       setAuthLoading(false);
+//     },
+//     (error) => {
+//       console.error("AUTH ERROR:", error);
+//       setAuthLoading(false);
+//     }
+//   );
+
+//   return unsubscribe;
+// }, []);
+
+//   useEffect(() => {
+//     if (loaded && !authLoading) {
+//       SplashScreen.hideAsync();
+//     }
+//   }, [loaded, authLoading]);
+ 
+//  if (!loaded || authLoading) {
+//   return (
+//     <View style={styles.loadingContainer}>
+//       <ActivityIndicator size="large" color="#ff6b9d" />
+//     </View>
+//   );
+// }
+//   // If user is not logged in, show AuthScreen
+//   if (!user) {
+//     return (
+//       <ThemeProvider>
+//         <GestureHandlerRootView style={{ flex: 1 }}>
+//           <AuthScreen />
+//           <StatusBar style="auto" />
+//         </GestureHandlerRootView>
+//       </ThemeProvider>
+//     );
+//   }
+
+//   // If user is logged in, show your existing app navigation
+//   return (
+//     <ThemeProvider>
+//       <GestureHandlerRootView style={{ flex: 1 }}>
+//         <Stack>
+//           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+//           <Stack.Screen name="diary-page" options={{ headerShown: false, title: 'Diary Page' }} />
+//           <Stack.Screen name="polaroid" options={{ headerShown: false, title: 'Polaroid' }} />
+//           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+//         </Stack>
+//         <StatusBar style="auto" />
+//       </GestureHandlerRootView>
+//     </ThemeProvider>
+//   );
+// }
 
 const styles = RNStyleSheet.create({
   loadingContainer: {

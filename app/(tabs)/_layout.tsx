@@ -6,6 +6,7 @@ import { useTheme } from '@/components/ThemeContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
+
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { theme } = useTheme();
@@ -19,7 +20,6 @@ export default function TabLayout() {
           backgroundColor: '#FFFFFF', // Always white
         },
         headerShown: false,
-        tabBarButton: HapticTab,
         tabBarLabelStyle: {
           fontFamily: 'PatrickHand_400Regular',
           fontSize: 12,
